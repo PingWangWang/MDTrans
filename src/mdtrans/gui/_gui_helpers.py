@@ -1,4 +1,4 @@
-"""MDTrans - GUI 辅助函数。
+﻿"""MDTrans - GUI 辅助函数。
 
 从 MarkdownExporterGUI 和 MarkitDownGUI 合并。
 提供资源路径解析、文件/URL 操作、拖拽路径解析、日志标签识别、依赖检查等功能。
@@ -11,8 +11,24 @@ import os
 import re
 import subprocess
 import sys
+import tkinter as tk
 from pathlib import Path
+from tkinter import scrolledtext, ttk
 from typing import Any
+
+# ── 布局常量 ──────────────────────────────────────────────────────────────
+
+# 标签列最小宽度（与 ExportPage 最长标签“选择 Markdown 文件:”匹配）
+# 使 ImportPage 与 ExportPage 的左侧标签列宽保持一致
+LABEL_COL_WIDTH: int = 155
+
+# DOCX 专属选项区域高度（模板 1 行 + Mermaid 2 行，每行约 30px）
+# 固定容器高度使两 Tab 页上半部编辑区域高度一致，切换格式时不跳变
+DOCX_OPTIONS_HEIGHT: int = 95
+
+# 日志 ScrolledText 默认行数
+DEFAULT_LOG_HEIGHT: int = 7
+
 
 # ── 资源路径解析 ──────────────────────────────────────────────────────────
 
@@ -168,3 +184,101 @@ def check_dependencies() -> list[tuple[str, bool]]:
     ]:
         deps.append(check_dependency(mod, display))
     return deps
+
+
+# ── 共享布局组件 ──────────────────────────────────────────────────────────
+
+
+def create_log_section(
+    parent: ttk.Frame,
+    row: int,
+    theme_manager: Any,
+    tag_list: list[tuple[str, str]],
+) -> tuple[int, scrolledtext.ScrolledText]:
+    """创建统一的日志区域（标签 + ScrolledText + 主题联动）。
+
+    供 ImportPage / ExportPage 共同调用，确保两页日志窗口大小一致。
+
+    Args:
+        parent: 父容器 Frame。
+        row: 起始行号。
+        theme_manager: ThemeManager 实例，提供 colors 和 watch 方法。
+        tag_list: [(tag名, 前景色), ...] 列表。
+
+    Returns:
+        (下一行号, ScrolledText 控件)。
+    """
+    ttk.Label(parent, text="处理日志:", font=("Microsoft YaHei UI", 9)).grid(
+        row=row, column=0, sticky=tk.NW, pady=(8, 2), padx=(0, 8))
+
+    colors = theme_manager.colors
+    log_text = scrolledtext.ScrolledText(
+        parent, height=DEFAULT_LOG_HEIGHT, wrap=tk.WORD,
+        font=("Consolas", 9),
+        bg=colors["log_bg"], fg=colors["log_fg"],
+        insertbackground=colors["log_fg"],
+        selectbackground=colors["select_bg"],
+        selectforeground=colors["select_fg"],
+        relief="flat", borderwidth=0, state="disabled")
+    log_text.grid(row=row, column=1, sticky=(tk.W, tk.E, tk.N, tk.S), pady=(8, 2))
+    parent.rowconfigure(row, weight=1)
+
+    theme_manager.watch(log_text, refresh_callback=lambda c: {
+        "bg": c["log_bg"], "fg": c["log_fg"],
+        "insertbackground": c["log_fg"],
+        "selectbackground": c["select_bg"],
+        "selectforeground": c["select_fg"],
+    })
+
+    for tag, color in tag_list:
+        log_text.tag_configure(tag, foreground=color)
+
+    return row + 1, log_text
+
+
+def create_action_buttons(
+    parent: ttk.Frame,
+    row: int,
+    process_text: str,
+    process_cmd: Any,
+    open_output_dir_cmd: Any,
+    open_last_doc_cmd: Any,
+    open_doc_width: int = 14,
+) -> tuple[int, ttk.Button, ttk.Button]:
+    """创建统一的操作栏（分隔线 + 三按钮）。
+
+    供 ImportPage / ExportPage 共同调用，确保两页按钮位置和大小一致。
+
+    Args:
+        parent: 父容器 Frame。
+        row: 起始行号。
+        process_text: 主操作按钮的文字。
+        process_cmd: 主操作按钮的回调。
+        open_output_dir_cmd: "打开输出目录"按钮回调。
+        open_last_doc_cmd: "打开文档"按钮回调。
+        open_doc_width: "打开文档"按钮宽度（默认 14）。
+
+    Returns:
+        (下一行号, 主操作按钮, 打开文档按钮)。
+    """
+    ttk.Separator(parent, orient="horizontal").grid(
+        row=row, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=6)
+    row += 1
+
+    bf = ttk.Frame(parent)
+    bf.grid(row=row, column=0, columnspan=2, pady=4)
+
+    process_btn = ttk.Button(
+        bf, text=process_text, command=process_cmd,
+        style="success.TButton", width=14)
+    process_btn.pack(side=tk.LEFT, padx=6)
+
+    ttk.Button(bf, text="📂  打开输出目录", command=open_output_dir_cmd,
+               style="info.TButton", width=14).pack(side=tk.LEFT, padx=6)
+
+    open_doc_btn = ttk.Button(
+        bf, text="📄  打开文档", command=open_last_doc_cmd,
+        style="info.TButton", width=open_doc_width, state="disabled")
+    open_doc_btn.pack(side=tk.LEFT, padx=6)
+
+    return row + 1, process_btn, open_doc_btn

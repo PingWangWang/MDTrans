@@ -1,4 +1,4 @@
-"""MDTrans - 导入模式页面（其他格式 → Markdown）。
+﻿"""MDTrans - 导入模式页面（其他格式 → Markdown）。
 
 从 MarkitDownGUI/gui/_app.py 迁移，适配为 Navigator 的子页面。
 与 ExportPage 保持 UI 一致性：统一使用 ttk.Treeview、tkinter.scrolledtext.ScrolledText、
@@ -18,7 +18,14 @@ from typing import Any
 
 from mdtrans.gui._version import APP_VERSION
 from mdtrans.gui._dialogs import DialogTheme, show_about as show_dialog_about
-from mdtrans.gui._gui_helpers import parse_dnd_paths, resolve_log_tag
+from mdtrans.gui._gui_helpers import (
+    DEFAULT_LOG_HEIGHT,
+    LABEL_COL_WIDTH,
+    parse_dnd_paths,
+    resolve_log_tag,
+    create_log_section,
+    create_action_buttons,
+)
 from mdtrans.gui._theme_manager import ThemeManager
 
 # 文件后缀 → 可读类型名
@@ -50,7 +57,6 @@ _FILE_TYPE_MAP = {
 }
 
 DEFAULT_LISTBOX_HEIGHT: int = 4
-DEFAULT_LOG_HEIGHT: int = 7
 
 
 class ImportPage:
@@ -135,7 +141,7 @@ class ImportPage:
     def _build_ui(self) -> None:
         mf = ttk.Frame(self._parent, padding="14 10 14 6")
         mf.pack(fill=tk.BOTH, expand=True)
-        mf.columnconfigure(0, minsize=110)
+        mf.columnconfigure(0, minsize=LABEL_COL_WIDTH)
         mf.columnconfigure(1, weight=1)
         row = 0
 
@@ -164,13 +170,13 @@ class ImportPage:
         btn_col = ttk.Frame(ff)
         btn_col.grid(row=0, column=1, sticky=tk.N)
         ttk.Button(btn_col, text="添加文件", command=self.select_files,
-                   style="primary.TButton", width=10).pack(pady=(0, 4))
+                   style="primary.TButton", width=10).pack(anchor=tk.E, pady=(0, 4))
         ttk.Button(btn_col, text="删除选中", command=self.remove_selected_files,
-                   style="danger.TButton", width=10).pack(pady=(0, 4))
+                   style="danger.TButton", width=10).pack(anchor=tk.E, pady=(0, 4))
         ttk.Button(btn_col, text="清空列表", command=self.clear_file_list,
-                   style="warning.TButton", width=10).pack()
+                   style="warning.TButton", width=10).pack(anchor=tk.E)
         row += 1
-
+        
         # 选择保存位置
         ttk.Label(mf, text="选择保存位置:", font=("Microsoft YaHei UI", 9)).grid(
             row=row, column=0, sticky=tk.W, pady=4, padx=(0, 8))
@@ -196,65 +202,37 @@ class ImportPage:
                         value="none").pack(side=tk.LEFT)
         row += 1
 
-        # 分割线 + 操作按钮
-        ttk.Separator(mf, orient="horizontal").grid(
-            row=row, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=6)
+        # DOCX 选项占位：固定高度容器，与 ExportPage 的 DOCX 选项区域保持一致
+        # 使两 Tab 页上半部编辑区域高度一致，分隔线/按钮位置与 ExportPage 对齐
+        from mdtrans.gui._gui_helpers import DOCX_OPTIONS_HEIGHT
+        docx_placeholder = ttk.Frame(mf, height=DOCX_OPTIONS_HEIGHT)
+        docx_placeholder.grid(row=row, column=0, columnspan=2, sticky=(tk.W, tk.E))
+        docx_placeholder.grid_propagate(False)
         row += 1
 
-        bf = ttk.Frame(mf)
-        bf.grid(row=row, column=0, columnspan=2, pady=4)
-        self.process_button = ttk.Button(
-            bf, text="▶  开始处理", command=self.start_processing,
-            style="success.TButton", width=14)
-        self.process_button.pack(side=tk.LEFT, padx=6)
-        ttk.Button(bf, text="📂  打开输出目录", command=self.open_output_dir,
-                   style="info.TButton", width=14).pack(side=tk.LEFT, padx=6)
-        self.open_doc_button = ttk.Button(
-            bf, text="📄  打开文档", command=self.open_last_document,
-            style="info.TButton", width=14, state="disabled")
-        self.open_doc_button.pack(side=tk.LEFT, padx=6)
-        row += 1
-
-        # 垂直占位：保持与 ExportPage（含格式/模板/Mermaid 共约 120px 控件）的日志起始位置一致
-        spacer = ttk.Frame(mf, height=110)
-        spacer.grid(row=row, column=0, columnspan=2, sticky=(tk.W, tk.E))
-        mf.rowconfigure(row, weight=0)
-        row += 1
+        # 分割线 + 操作按钮（与 ExportPage 共享布局）
+        row, self.process_button, self.open_doc_button = create_action_buttons(
+            mf, row,
+            process_text="▶  开始处理",
+            process_cmd=self.start_processing,
+            open_output_dir_cmd=self.open_output_dir,
+            open_last_doc_cmd=self.open_last_document,
+        )
 
         # 日志区域（与 ExportPage 一致）
-        ttk.Label(mf, text="处理日志:", font=("Microsoft YaHei UI", 9)).grid(
-            row=row, column=0, sticky=tk.NW, pady=(8, 2), padx=(0, 8))
-        c = self._tm.colors
-        self.log_text = scrolledtext.ScrolledText(
-            mf, height=DEFAULT_LOG_HEIGHT, wrap=tk.WORD,
-            font=("Consolas", 9),
-            bg=c["log_bg"], fg=c["log_fg"],
-            insertbackground=c["log_fg"],
-            selectbackground=c["select_bg"],
-            selectforeground=c["select_fg"],
-            relief="flat", borderwidth=0, state="disabled")
-        self.log_text.grid(row=row + 1, column=1, sticky=(tk.W, tk.E, tk.N, tk.S), pady=(8, 2))
-        mf.rowconfigure(row + 1, weight=1)
-        self._tm.watch(self.log_text, refresh_callback=lambda c: {
-            "bg": c["log_bg"], "fg": c["log_fg"],
-            "insertbackground": c["log_fg"],
-            "selectbackground": c["select_bg"],
-            "selectforeground": c["select_fg"],
-        })
-        for tag, color in [
-            ("success", "#00AA00"), ("error", "#CC0000"), ("warning", "#CC9900"),
-            ("info", "#0066CC"), ("arrow", "#666666"), ("complete", "#0066CC"),
-            ("normal", c["log_fg"]),
-        ]:
-            self.log_text.tag_configure(tag, foreground=color)
-        row += 2
+        row, self.log_text = create_log_section(
+            mf, row, self._tm, [
+                ("success", "#00AA00"), ("error", "#CC0000"), ("warning", "#CC9900"),
+                ("info", "#0066CC"), ("arrow", "#666666"), ("complete", "#0066CC"),
+                ("normal", self._tm.colors["log_fg"]),
+            ])
 
         # 底部链接（与 ExportPage 一致）
         lf = ttk.Frame(mf)
         lf.grid(row=row, column=0, columnspan=2, pady=(4, 2), sticky=(tk.W, tk.E))
         lbl = ttk.Label(lf, text="查看项目说明及帮助文档 >>",
                         font=("Microsoft YaHei UI", 9, "underline"),
-                        foreground=c.get("link", "#3498DB"), cursor="hand2")
+                        foreground=self._tm.colors.get("link", "#3498DB"), cursor="hand2")
         lbl.pack(side=tk.LEFT)
         lbl.bind("<Button-1>", lambda e: self.show_about())
         ttk.Label(lf, text=f"v{APP_VERSION}", font=("Microsoft YaHei UI", 9)).pack(side=tk.RIGHT)

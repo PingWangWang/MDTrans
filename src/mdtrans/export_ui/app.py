@@ -1,4 +1,4 @@
-"""MDTrans - 导出模式页面（Markdown → 其他格式）。
+﻿"""MDTrans - 导出模式页面（Markdown → 其他格式）。
 
 从 MarkdownExporterGUI/gui/_app.py 迁移，适配为 Navigator 的子页面。
 """
@@ -21,18 +21,21 @@ from mdtrans.gui._dialogs import (
     show_about,
 )
 from mdtrans.gui._gui_helpers import (
+    DEFAULT_LOG_HEIGHT,
+    LABEL_COL_WIDTH,
     check_dependencies,
     get_icon_path,
     open_file_or_dir,
     parse_dnd_paths,
     resolve_log_tag,
+    create_log_section,
+    create_action_buttons,
 )
 from mdtrans.gui._theme_manager import ThemeManager
 from mdtrans.gui._version import APP_VERSION
 
 DEFAULT_WINDOW_WIDTH: int = 750
 DEFAULT_LISTBOX_HEIGHT: int = 4
-DEFAULT_LOG_HEIGHT: int = 7
 
 
 class ExportPage:
@@ -65,7 +68,6 @@ class ExportPage:
         self.is_processing: bool = False
         self.last_output_file: str | None = None
         self.last_single_output: str | None = None
-        self.debug_logging = tk.BooleanVar(value=True)
         self.use_template = tk.BooleanVar(value=config.get("use_template", False))
         self.template_path = tk.StringVar(value=config.get("template_path", ""))
         self.save_mermaid_images = tk.BooleanVar(value=config.get("save_mermaid_images", False))
@@ -143,8 +145,7 @@ class ExportPage:
             pass
 
     def _log_message_from_service(self, message: str) -> None:
-        if self.debug_logging.get():
-            self.log_message(f"[服务] {message}")
+        self.log_message(f"[服务] {message}")
 
     def log_message(self, message: str, tag: str | None = None) -> None:
         """向日志区域追加消息。"""
@@ -161,7 +162,7 @@ class ExportPage:
     def _build_ui(self) -> None:
         mf = ttk.Frame(self._parent, padding="14 10 14 6")
         mf.pack(fill=tk.BOTH, expand=True)
-        mf.columnconfigure(0, minsize=110)
+        mf.columnconfigure(0, minsize=LABEL_COL_WIDTH)
         mf.columnconfigure(1, weight=1)
         self._main_frame = mf
         row = 0
@@ -169,10 +170,23 @@ class ExportPage:
         row = self._create_file_section(mf, row)
         row = self._create_output_dir_section(mf, row)
         row = self._create_format_section(mf, row)
-        row = self._create_template_section(mf, row)
-        row = self._create_mermaid_sections(mf, row)
-        row = self._create_action_buttons(mf, row)
-        row = self._create_log_section(mf, row)
+        row = self._create_docx_options_section(mf, row)
+        # 分隔线 + 操作按钮（与 ImportPage 共享布局）
+        row, self.process_button, self.open_doc_button = create_action_buttons(
+            mf, row,
+            process_text="▶  开始转换",
+            process_cmd=self.start_processing,
+            open_output_dir_cmd=self.open_output_dir,
+            open_last_doc_cmd=self.open_last_document,
+        )
+        # 日志区域（与 ImportPage 共享布局）
+        row, self.log_text = create_log_section(
+            mf, row, self._tm, [
+                ("success", "#00AA00"), ("error", "#CC0000"), ("warning", "#CC9900"),
+                ("info", "#0066CC"), ("arrow", "#666666"), ("complete", "#0066CC"),
+                ("summary", "#CC6600"), ("service", "#666666"),
+                ("normal", self._tm.colors["log_fg"]),
+            ])
         self._create_footer(mf, row)
 
         # Treeview 本地拖拽注册（与根窗口全局监听互备）
@@ -205,11 +219,11 @@ class ExportPage:
         btn_col = ttk.Frame(ff)
         btn_col.grid(row=0, column=1, sticky=tk.N)
         ttk.Button(btn_col, text="添加文件", command=self.select_files,
-                   style="primary.TButton", width=10).pack(pady=(0, 4))
+                   style="primary.TButton", width=10).pack(anchor=tk.E, pady=(0, 4))
         ttk.Button(btn_col, text="删除选中", command=self.remove_selected_files,
-                   style="danger.TButton", width=10).pack(pady=(0, 4))
+                   style="danger.TButton", width=10).pack(anchor=tk.E, pady=(0, 4))
         ttk.Button(btn_col, text="清空列表", command=self.clear_files,
-                   style="warning.TButton", width=10).pack()
+                   style="warning.TButton", width=10).pack(anchor=tk.E)
         self.file_treeview.bind("<Delete>", lambda e: self.remove_selected_files())
         return row + 1
 
@@ -237,16 +251,35 @@ class ExportPage:
         self.format_combo.bind("<<ComboboxSelected>>", self.on_format_change)
         return row + 1
 
-    def _create_template_section(self, mf: ttk.Frame, row: int) -> int:
-        self.template_label = ttk.Label(mf, text="使用自定义模板:", font=("Microsoft YaHei UI", 9))
-        self.template_label.grid(row=row, column=0, sticky=tk.W, pady=4, padx=(0, 8))
-        tf = ttk.Frame(mf)
-        tf.grid(row=row, column=1, sticky=(tk.W, tk.E), pady=4)
+    def _create_docx_options_section(self, mf: ttk.Frame, row: int) -> int:
+        """创建 DOCX 专属选项区域（模板 + Mermaid 设置）。
+
+        使用固定高度容器统一占位，使两 Tab 页上半部编辑区域高度一致；
+        切换输出格式时容器始终保留高度，仅显隐内部子控件。
+        """
+        from mdtrans.gui._gui_helpers import DOCX_OPTIONS_HEIGHT, LABEL_COL_WIDTH
+
+        container = ttk.Frame(mf, height=DOCX_OPTIONS_HEIGHT)
+        container.grid(row=row, column=0, columnspan=2, sticky=(tk.W, tk.E))
+        container.grid_propagate(False)
+        container.columnconfigure(0, minsize=LABEL_COL_WIDTH)
+        container.columnconfigure(1, weight=1)
+        self._docx_frame = container
+
+        r = 0  # 容器内行号
+
+        # ── 模板行 ──
+        self.template_label = ttk.Label(container, text="使用自定义模板:",
+                                        font=("Microsoft YaHei UI", 9))
+        self.template_label.grid(row=r, column=0, sticky=tk.W, pady=4, padx=(0, 8))
+        tf = ttk.Frame(container)
+        tf.grid(row=r, column=1, sticky=(tk.W, tk.E), pady=4)
         tf.columnconfigure(1, weight=1)
         self.template_check = ttk.Checkbutton(tf, text="", variable=self.use_template,
                                               command=self.on_template_toggle)
         self.template_check.grid(row=0, column=0, padx=(0, 4))
-        self.template_path_entry = ttk.Entry(tf, textvariable=self.template_path, state="readonly")
+        self.template_path_entry = ttk.Entry(tf, textvariable=self.template_path,
+                                             state="readonly")
         self.template_path_entry.grid(row=0, column=1, sticky=(tk.W, tk.E), padx=(0, 4))
         self.select_template_btn = ttk.Button(
             tf, text="选择模板", command=self.select_template,
@@ -255,78 +288,31 @@ class ExportPage:
         self.template_frame = tf
         if not self.use_template.get():
             self.select_template_btn.configure(state="disabled")
-        return row + 1
+        r += 1
 
-    def _create_mermaid_sections(self, mf: ttk.Frame, row: int) -> int:
-        # Mermaid 转换
-        self.convert_mermaid_label = ttk.Label(mf, text="转换 Mermaid 图表:", font=("Microsoft YaHei UI", 9))
-        self.convert_mermaid_label.grid(row=row, column=0, sticky=tk.W, pady=4, padx=(0, 8))
-        mf1 = ttk.Frame(mf)
-        mf1.grid(row=row, column=1, sticky=tk.W, pady=4)
-        ttk.Checkbutton(mf1, text="", variable=self.convert_mermaid_images).pack(side=tk.LEFT, padx=(0, 8))
+        # ── Mermaid 转换行 ──
+        self.convert_mermaid_label = ttk.Label(container, text="转换 Mermaid 图表:",
+                                               font=("Microsoft YaHei UI", 9))
+        self.convert_mermaid_label.grid(row=r, column=0, sticky=tk.W, pady=4, padx=(0, 8))
+        mf1 = ttk.Frame(container)
+        mf1.grid(row=r, column=1, sticky=tk.W, pady=4)
+        ttk.Checkbutton(mf1, text="", variable=self.convert_mermaid_images).pack(
+            side=tk.LEFT, padx=(0, 8))
         self.convert_mermaid_frame = mf1
-        row += 1
+        r += 1
 
-        self.save_mermaid_label = ttk.Label(mf, text="保存 Mermaid 图片:", font=("Microsoft YaHei UI", 9))
-        self.save_mermaid_label.grid(row=row, column=0, sticky=tk.W, pady=4, padx=(0, 8))
-        mf2 = ttk.Frame(mf)
-        mf2.grid(row=row, column=1, sticky=tk.W, pady=4)
-        ttk.Checkbutton(mf2, text="", variable=self.save_mermaid_images).pack(side=tk.LEFT, padx=(0, 8))
+        # ── Mermaid 保存行 ──
+        self.save_mermaid_label = ttk.Label(container, text="保存 Mermaid 图片:",
+                                            font=("Microsoft YaHei UI", 9))
+        self.save_mermaid_label.grid(row=r, column=0, sticky=tk.W, pady=4, padx=(0, 8))
+        mf2 = ttk.Frame(container)
+        mf2.grid(row=r, column=1, sticky=tk.W, pady=4)
+        ttk.Checkbutton(mf2, text="", variable=self.save_mermaid_images).pack(
+            side=tk.LEFT, padx=(0, 8))
         self.save_mermaid_frame = mf2
-        return row + 1
+        r += 1
 
-    def _create_action_buttons(self, mf: ttk.Frame, row: int) -> int:
-        ttk.Separator(mf, orient="horizontal").grid(
-            row=row, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=6)
-        row += 1
-        bf = ttk.Frame(mf)
-        bf.grid(row=row, column=0, columnspan=2, pady=4)
-        self.process_button = ttk.Button(
-            bf, text="▶  开始转换", command=self.start_processing,
-            style="success.TButton", width=14)
-        self.process_button.pack(side=tk.LEFT, padx=6)
-        ttk.Button(bf, text="📂  打开输出目录", command=self.open_output_dir,
-                   style="info.TButton", width=14).pack(side=tk.LEFT, padx=6)
-        self.open_doc_button = ttk.Button(
-            bf, text="📄  打开文档", command=self.open_last_document,
-            style="info.TButton", width=12, state="disabled")
-        self.open_doc_button.pack(side=tk.LEFT, padx=6)
         return row + 1
-
-    def _create_log_section(self, mf: ttk.Frame, row: int) -> int:
-        ttk.Label(mf, text="处理日志:", font=("Microsoft YaHei UI", 9)).grid(
-            row=row, column=0, sticky=tk.NW, pady=(8, 2), padx=(0, 8))
-        log_right_frame = ttk.Frame(mf)
-        log_right_frame.grid(row=row, column=1, sticky=(tk.W, tk.E), pady=(8, 2))
-        log_right_frame.columnconfigure(0, weight=1)
-        debug_check = ttk.Checkbutton(log_right_frame, text="显示详细日志",
-                                       variable=self.debug_logging,
-                                       command=self._on_debug_logging_change)
-        debug_check.grid(row=0, column=0, sticky=tk.W)
-        c = self._tm.colors
-        self.log_text = scrolledtext.ScrolledText(
-            mf, height=DEFAULT_LOG_HEIGHT, wrap=tk.WORD,
-            font=("Consolas", 9),
-            bg=c["log_bg"], fg=c["log_fg"],
-            insertbackground=c["log_fg"],
-            selectbackground=c["select_bg"],
-            selectforeground=c["select_fg"],
-            relief="flat", borderwidth=0, state="disabled")
-        self.log_text.grid(row=row + 1, column=1, sticky=(tk.W, tk.E, tk.N, tk.S), pady=(8, 2))
-        mf.rowconfigure(row + 1, weight=1)
-        self._tm.watch(self.log_text, refresh_callback=lambda c: {
-            "bg": c["log_bg"], "fg": c["log_fg"],
-            "insertbackground": c["log_fg"],
-            "selectbackground": c["select_bg"],
-            "selectforeground": c["select_fg"],
-        })
-        for tag, color in [
-            ("success", "#00AA00"), ("error", "#CC0000"), ("warning", "#CC9900"),
-            ("info", "#0066CC"), ("arrow", "#666666"), ("complete", "#0066CC"),
-            ("summary", "#CC6600"), ("service", "#666666"), ("normal", c["log_fg"]),
-        ]:
-            self.log_text.tag_configure(tag, foreground=color)
-        return row + 2
 
     def _create_footer(self, mf: ttk.Frame, row: int) -> None:
         lf = ttk.Frame(mf)
@@ -343,11 +329,8 @@ class ExportPage:
     def on_format_change(self, event: tk.Event | None = None) -> None:
         output_format = self.get_selected_format()
         visible = output_format == "DOCX"
-        for widget in [self.template_label, self.template_frame,
-                       self.save_mermaid_label, self.save_mermaid_frame,
-                       self.convert_mermaid_label, self.convert_mermaid_frame]:
-            if widget:
-                widget.grid() if visible else widget.grid_remove()
+        for child in self._docx_frame.winfo_children():
+            child.grid() if visible else child.grid_remove()
         if not visible:
             self.use_template.set(False)
             self.template_path.set("")
@@ -368,9 +351,6 @@ class ExportPage:
         if template:
             self.template_path.set(template)
             self.log_message(f"已选择模板: {Path(template).name}")
-
-    def _on_debug_logging_change(self) -> None:
-        self.log_message(f"[信息] {'已启用' if self.debug_logging.get() else '已关闭'}详细日志模式")
 
     def on_drop(self, event: Any) -> None:
         """处理拖拽放入的文件（由 Navigator.handle_drop 或 Treeview 本地事件调用）。

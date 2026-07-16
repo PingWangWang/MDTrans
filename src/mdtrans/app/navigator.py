@@ -91,7 +91,7 @@ class Navigator:
 
         # ── 内容区域 ──────────────────────────────────────────────────────
         self._content = ttk.Frame(self._main)
-        self._content.pack(fill=tk.BOTH, expand=True, padx=14, pady=(6, 0))
+        self._content.pack(fill=tk.BOTH, expand=True, pady=(6, 0))
 
         # 创建两个页面（各自使用独立的 Frame）
         self._import_frame = ttk.Frame(self._content)
