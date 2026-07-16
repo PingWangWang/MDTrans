@@ -1,0 +1,77 @@
+[project]
+name = "mdtrans"
+version = "1.0.0"
+description = "MDTrans — 双向文档转换工具：导入各类格式为 Markdown，导出 Markdown 为其他格式"
+authors = [
+    { name = "MDTrans Contributors" },
+]
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Apache-2.0" }
+
+dependencies = [
+    # 导入引擎（markitdown 核心依赖）
+    "beautifulsoup4>=4.12",
+    "requests>=2.31",
+    "markdownify>=0.11",
+    "magika>=0.5",
+    "charset-normalizer>=3.3",
+    "defusedxml>=0.7",
+    # 导入格式支持
+    "pdfminer.six>=20231228",
+    "pdfplumber>=0.10",
+    "python-docx>=1.1",
+    "mammoth>=1.6",
+    "python-pptx>=0.6",
+    "openpyxl>=3.1",
+    "xlrd>=2.0",
+    "pillow>=10.2",
+    # 导出引擎
+    "markdown>=3.5",
+    "pandas>=2.1",
+    "xhtml2pdf>=0.2",
+    "reportlab>=4.0",
+    "pypandoc-binary>=1.12",
+    # GUI
+    "ttkbootstrap>=1.10",
+    # MarkItDown 库
+    "markitdown>=0.1.0",
+]
+
+[project.optional-dependencies]
+# 可选：音频支持
+audio = ["pydub>=0.25", "SpeechRecognition>=3.10"]
+# 可选：YouTube 字幕
+youtube = ["youtube-transcript-api>=0.6"]
+# 可选：OCR（Azure AI Document Intelligence）
+ocr = ["azure-ai-documentintelligence"]
+# 可选：拖拽支持（Windows）
+dnd = ["tkinterdnd2>=0.3"]
+# 全部可选
+all = [
+    "mdtrans[audio]",
+    "mdtrans[youtube]",
+    "mdtrans[ocr]",
+    "mdtrans[dnd]",
+]
+
+[project.urls]
+Homepage = "https://github.com/example/mdtrans"
+Documentation = "https://github.com/example/mdtrans#readme"
+
+[project.scripts]
+mdtrans = "mdtrans.main:main"
+
+[build-system]
+requires = ["uv_build>=0.1"]
+build-backend = "uv_build"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

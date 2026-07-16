@@ -1,0 +1,20 @@
+{
+  "theme": "light",
+  "import": {
+    "last_output_dir": "",
+    "image_mode": "embed"
+  },
+  "export": {
+    "last_output_dir": "",
+    "last_format": "DOCX",
+    "use_template": false,
+    "template_path": "",
+    "convert_mermaid": true,
+    "save_mermaid_images": false,
+    "convert_mermaid_images": true
+  },
+  "window": {
+    "width": 750,
+    "height": 560
+  }
+}
