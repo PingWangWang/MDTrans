@@ -20,7 +20,10 @@ from mdtrans.__about__ import __version__
 
 @dataclass(frozen=True)
 class DialogTheme:
-    """对话框样式参数（不可变）。"""
+    """对话框样式参数（不可变）。
+
+    请始终从 ThemeManager.colors 传入值，不要依赖默认值。
+    """
 
     root: tk.Tk | tk.Toplevel | None = None
     bg: str = "#FFFFFF"

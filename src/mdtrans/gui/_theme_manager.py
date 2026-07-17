@@ -149,7 +149,7 @@ class ThemeManager:
             "panel_bg": c.dark if is_dark else c.light,
             "label_fg": c.fg,
             "entry_bg": getattr(c, "input_bg", c.bg),
-            "border": getattr(c, "border", "#CCCCCC"),
+            "border": c.secondary if is_dark else getattr(c, "border", "#CCCCCC"),
             "log_bg": c.dark if is_dark else c.bg,
             "log_fg": "#D4D4D4" if is_dark else c.fg,
             "link": c.info,

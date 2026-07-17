@@ -55,9 +55,6 @@ class Navigator:
         self._tab_bar = ttk.Frame(self._main)
         self._tab_bar.pack(fill=tk.X, padx=14, pady=(10, 0))
 
-        # 菜单栏（帮助 → 关于 MDTrans）
-        self._setup_menu_bar()
-
         # 导入 Tab 按钮 — 使用 Label 实现更丰富的高亮效果
         self._import_tab_btn = tk.Label(
             self._tab_bar,
@@ -82,16 +79,25 @@ class Navigator:
         self._export_tab_btn.pack(side=tk.LEFT)
         self._export_tab_btn.bind("<ButtonRelease-1>", lambda e: self.switch_tab(self.TAB_EXPORT))
 
-        # 主题切换按钮（Tab 栏右侧）
-        theme_btn_frame = ttk.Frame(self._tab_bar)
-        theme_btn_frame.pack(side=tk.RIGHT)
+        # Tab 栏右侧操作按钮组
+        action_frame = ttk.Frame(self._tab_bar)
+        action_frame.pack(side=tk.RIGHT)
+
+        self._about_btn = ttk.Button(
+            action_frame,
+            text="关于",
+            command=self._show_about,
+            width=6,
+        )
+        self._about_btn.pack(side=tk.RIGHT, padx=(4, 0))
+
         self._theme_btn = ttk.Button(
-            theme_btn_frame,
+            action_frame,
             text="亮色主题" if self._tm.is_dark else "暗色主题",
             command=self._toggle_theme,
             width=10,
         )
-        self._theme_btn.pack()
+        self._theme_btn.pack(side=tk.RIGHT)
 
         # ── 内容区域 ──────────────────────────────────────────────────────
         self._content = ttk.Frame(self._main)
@@ -199,17 +205,9 @@ class Navigator:
         theme = DialogTheme(
             root=self.root,
             bg=c["bg"],
-            header_bg=c.get("header_bg", "#2C3E50"),
-            header_fg=c.get("header_fg", "#FFFFFF"),
-            label_fg=c.get("label_fg", "#333333"),
-            border_color=c.get("border", "#CCCCCC"),
+            header_bg=c["header_bg"],
+            header_fg=c["header_fg"],
+            label_fg=c["label_fg"],
+            border_color=c["border"],
         )
         show_about(theme)
-
-    def _setup_menu_bar(self) -> None:
-        """创建菜单栏（帮助 → 关于 MDTrans）。"""
-        menubar = tk.Menu(self.root, font=("Microsoft YaHei UI", 9))
-        help_menu = tk.Menu(menubar, tearoff=False, font=("Microsoft YaHei UI", 9))
-        help_menu.add_command(label="关于 MDTrans", command=self._show_about)
-        menubar.add_cascade(label="帮助", menu=help_menu)
-        self.root.config(menu=menubar)
