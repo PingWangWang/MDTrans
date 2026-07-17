@@ -18,7 +18,6 @@ from mdtrans.gui._dialogs import (
     DialogTheme,
     ask_file_locked,
     ask_overwrite_batch,
-    show_about,
 )
 from mdtrans.gui._gui_helpers import (
     DEFAULT_LOG_HEIGHT,
@@ -316,11 +315,6 @@ class ExportPage:
     def _create_footer(self, mf: ttk.Frame, row: int) -> None:
         lf = ttk.Frame(mf)
         lf.grid(row=row, column=0, columnspan=2, pady=(4, 2), sticky=(tk.W, tk.E))
-        lbl = ttk.Label(lf, text="查看项目说明及帮助文档 >>",
-                        font=("Microsoft YaHei UI", 9, "underline"),
-                        foreground=self._tm.colors.get("link", "#3498DB"), cursor="hand2")
-        lbl.pack(side=tk.LEFT)
-        lbl.bind("<Button-1>", lambda e: self.show_about())
         ttk.Label(lf, text=f"v{APP_VERSION}", font=("Microsoft YaHei UI", 9)).pack(side=tk.RIGHT)
 
     # ── 交互回调 ────────────────────────────────────────────────────────────
@@ -460,9 +454,6 @@ class ExportPage:
             if f"{desc} ({ext})" == selected:
                 return code
         return "DOCX"
-
-    def show_about(self) -> None:
-        show_about(self._get_dialog_theme())
 
     def open_last_document(self) -> None:
         path = self.last_single_output

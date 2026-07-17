@@ -10,6 +10,7 @@ from tkinter import ttk
 from typing import Any
 
 from mdtrans.__about__ import __version__
+from mdtrans.gui._dialogs import DialogTheme, show_about
 from mdtrans.gui._theme_manager import ThemeManager
 from mdtrans.export_ui.app import ExportPage
 from mdtrans.import_ui.app import ImportPage
@@ -54,6 +55,9 @@ class Navigator:
         self._tab_bar = ttk.Frame(self._main)
         self._tab_bar.pack(fill=tk.X, padx=14, pady=(10, 0))
 
+        # 菜单栏（帮助 → 关于 MDTrans）
+        self._setup_menu_bar()
+
         # 导入 Tab 按钮 — 使用 Label 实现更丰富的高亮效果
         self._import_tab_btn = tk.Label(
             self._tab_bar,
@@ -83,7 +87,7 @@ class Navigator:
         theme_btn_frame.pack(side=tk.RIGHT)
         self._theme_btn = ttk.Button(
             theme_btn_frame,
-            text="🌙 暗色",
+            text="亮色主题" if self._tm.is_dark else "暗色主题",
             command=self._toggle_theme,
             width=10,
         )
@@ -174,7 +178,7 @@ class Navigator:
         """切换明暗主题并更新按钮文本。"""
         self._tm.toggle()
         self._theme_btn.configure(
-            text="☀️ 亮色" if self._tm.is_dark else "🌙 暗色"
+            text="亮色主题" if self._tm.is_dark else "暗色主题"
         )
         # 刷新 Tab 按钮颜色以匹配新主题
         self._update_tab_style()
@@ -187,3 +191,25 @@ class Navigator:
     def get_dialog_root(self) -> tk.Tk:
         """返回根窗口（供对话框使用）。"""
         return self.root
+
+
+    def _show_about(self) -> None:
+        """显示关于对话框。"""
+        c = self._tm.colors
+        theme = DialogTheme(
+            root=self.root,
+            bg=c["bg"],
+            header_bg=c.get("header_bg", "#2C3E50"),
+            header_fg=c.get("header_fg", "#FFFFFF"),
+            label_fg=c.get("label_fg", "#333333"),
+            border_color=c.get("border", "#CCCCCC"),
+        )
+        show_about(theme)
+
+    def _setup_menu_bar(self) -> None:
+        """创建菜单栏（帮助 → 关于 MDTrans）。"""
+        menubar = tk.Menu(self.root, font=("Microsoft YaHei UI", 9))
+        help_menu = tk.Menu(menubar, tearoff=False, font=("Microsoft YaHei UI", 9))
+        help_menu.add_command(label="关于 MDTrans", command=self._show_about)
+        menubar.add_cascade(label="帮助", menu=help_menu)
+        self.root.config(menu=menubar)

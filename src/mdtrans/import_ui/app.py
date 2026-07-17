@@ -17,7 +17,7 @@ from tkinter import filedialog, messagebox, scrolledtext, ttk
 from typing import Any
 
 from mdtrans.gui._version import APP_VERSION
-from mdtrans.gui._dialogs import DialogTheme, show_about as show_dialog_about
+from mdtrans.gui._dialogs import DialogTheme
 from mdtrans.gui._gui_helpers import (
     DEFAULT_LOG_HEIGHT,
     LABEL_COL_WIDTH,
@@ -226,14 +226,9 @@ class ImportPage:
                 ("normal", self._tm.colors["log_fg"]),
             ])
 
-        # 底部链接（与 ExportPage 一致）
+        # 底部版本号
         lf = ttk.Frame(mf)
         lf.grid(row=row, column=0, columnspan=2, pady=(4, 2), sticky=(tk.W, tk.E))
-        lbl = ttk.Label(lf, text="查看项目说明及帮助文档 >>",
-                        font=("Microsoft YaHei UI", 9, "underline"),
-                        foreground=self._tm.colors.get("link", "#3498DB"), cursor="hand2")
-        lbl.pack(side=tk.LEFT)
-        lbl.bind("<Button-1>", lambda e: self.show_about())
         ttk.Label(lf, text=f"v{APP_VERSION}", font=("Microsoft YaHei UI", 9)).pack(side=tk.RIGHT)
 
         # Treeview 本地拖拽注册（与根窗口全局监听互备）
@@ -385,9 +380,6 @@ class ImportPage:
                 subprocess.run(["xdg-open", self.last_output_file], check=False)
         except Exception as e:
             messagebox.showerror("错误", f"无法打开文档：{e}")
-
-    def show_about(self) -> None:
-        show_dialog_about(self._get_dialog_theme())
 
     def show_contact(self) -> None:
         messagebox.showinfo(

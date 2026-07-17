@@ -25,9 +25,9 @@ class ThemeManager:
         style: ttkbootstrap.Style 实例。
     """
 
-    def __init__(self, style: Any) -> None:
+    def __init__(self, style: Any, mode: str = "light") -> None:
         self._style = style
-        self._mode: str = "light"
+        self._mode = mode
         self._colors: dict[str, str] = {}
         self._watched_widgets: list[dict[str, Any]] = []
         self._global_callbacks: list[ThemeChangeCallback] = []

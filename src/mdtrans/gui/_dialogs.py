@@ -12,6 +12,7 @@ from tkinter import ttk
 from typing import Any, Callable
 
 from mdtrans.gui._gui_helpers import open_url
+from mdtrans.__about__ import __version__
 
 
 # ── DialogTheme ────────────────────────────────────────────────────────────
@@ -80,12 +81,12 @@ def show_about(theme: DialogTheme) -> None:
     if theme.root is None:
         return
     top = tk.Toplevel(theme.root)
-    top.title("关于 MDTrans")
+    top.title(f"关于 MDTrans v{__version__}")
     top.configure(bg=theme.bg)
     top.resizable(False, False)
 
-    # 标题栏
-    header = tk.Frame(top, bg=theme.header_bg, height=36)
+    # ── 标题栏 ────────────────────────────────────────────────────────
+    header = tk.Frame(top, bg=theme.header_bg, height=40)
     header.pack(fill="x")
     header.pack_propagate(False)
     tk.Label(
@@ -93,53 +94,85 @@ def show_about(theme: DialogTheme) -> None:
         text="MDTrans",
         bg=theme.header_bg,
         fg=theme.header_fg,
-        font=("Microsoft YaHei UI", 11, "bold"),
-    ).pack(side="left", padx=12, pady=4)
+        font=("Microsoft YaHei UI", 13, "bold"),
+    ).pack(side="left", padx=16, pady=6)
     tk.Label(
         header,
-        text="v1.0.0",
+        text=f"v{__version__}",
         bg=theme.header_bg,
         fg=theme.header_fg,
         font=("Microsoft YaHei UI", 9),
-    ).pack(side="right", padx=12, pady=4)
+    ).pack(side="right", padx=16, pady=6)
 
-    # 内容区域
-    content = tk.Frame(top, bg=theme.bg, padx=20, pady=16)
+    # ── 内容区域 ──────────────────────────────────────────────────────
+    content = tk.Frame(top, bg=theme.bg, padx=24, pady=18)
     content.pack(fill="both", expand=True)
 
+    # 工具描述
     tk.Label(
         content,
         text="双向文档转换工具",
         bg=theme.bg,
         fg=theme.label_fg,
-        font=("Microsoft YaHei UI", 10, "bold"),
-    ).pack(fill="x", pady=4)
-
+        font=("Microsoft YaHei UI", 11, "bold"),
+    ).pack(fill="x", pady=(0, 2))
     tk.Label(
         content,
-        text="导入：PDF / DOCX / PPTX / XLSX / HTML / 图片等 → Markdown",
+        text="导入多种格式为 Markdown，或将 Markdown 导出为其他格式",
         bg=theme.bg,
         fg=theme.label_fg,
         font=("Microsoft YaHei UI", 9),
         anchor="w",
         justify="left",
-    ).pack(fill="x", pady=1)
+    ).pack(fill="x", pady=(0, 10))
+
+    # 格式支持
+    fmt_frame = tk.Frame(content, bg=theme.bg)
+    fmt_frame.pack(fill="x", pady=(0, 10))
 
     tk.Label(
-        content,
-        text="导出：Markdown → DOCX / PDF / HTML",
+        fmt_frame,
+        text="📥 导入",
+        bg=theme.bg,
+        fg=theme.label_fg,
+        font=("Microsoft YaHei UI", 9, "bold"),
+    ).pack(anchor="w")
+    tk.Label(
+        fmt_frame,
+        text="PDF / DOCX / PPTX / XLSX / HTML / 图片 / 文本 → Markdown",
         bg=theme.bg,
         fg=theme.label_fg,
         font=("Microsoft YaHei UI", 9),
         anchor="w",
         justify="left",
-    ).pack(fill="x", pady=1)
+    ).pack(fill="x", pady=(1, 6))
+
+    tk.Label(
+        fmt_frame,
+        text="📤 导出",
+        bg=theme.bg,
+        fg=theme.label_fg,
+        font=("Microsoft YaHei UI", 9, "bold"),
+    ).pack(anchor="w")
+    tk.Label(
+        fmt_frame,
+        text="Markdown → DOCX / PDF / HTML",
+        bg=theme.bg,
+        fg=theme.label_fg,
+        font=("Microsoft YaHei UI", 9),
+        anchor="w",
+        justify="left",
+    ).pack(fill="x", pady=(1, 0))
 
     tk.Frame(content, bg=theme.border_color, height=1).pack(fill="x", pady=12)
 
+    # 版本与链接
+    info_frame = tk.Frame(content, bg=theme.bg)
+    info_frame.pack(fill="x")
+
     tk.Label(
-        content,
-        text="基于 MarkdownExporterGUI v3.6.9 + MarkitDown",
+        info_frame,
+        text="基于 MarkdownExporterGUI v3.6.9 + MarkitDownGUI 合并",
         bg=theme.bg,
         fg=theme.label_fg,
         font=("Microsoft YaHei UI", 9),
@@ -148,25 +181,28 @@ def show_about(theme: DialogTheme) -> None:
     ).pack(fill="x", pady=1)
 
     link = tk.Label(
-        content,
-        text="📖 查看文档",
+        info_frame,
+        text="在 GitHub 上查看文档 >>",
         bg=theme.bg,
         fg="#3498DB",
-        font=("Microsoft YaHei UI", 9),
+        font=("Microsoft YaHei UI", 9, "underline"),
         cursor="hand2",
     )
-    link.pack(fill="x", pady=4)
-    link.bind("<ButtonRelease-1>", lambda e: open_url("https://github.com/"))
+    link.pack(fill="x", pady=(6, 0))
+    link.bind(
+        "<ButtonRelease-1>",
+        lambda e: open_url("https://github.com/PingWangWang/MDTrans"),
+    )
 
     tk.Frame(content, bg=theme.border_color, height=1).pack(fill="x", pady=12)
 
-    # 关闭按钮
+    # ── 关闭按钮 ─────────────────────────────────────────────────────
     btn_frame = tk.Frame(content, bg=theme.bg)
-    btn_frame.pack(fill="x", pady=(8, 0))
+    btn_frame.pack(fill="x", pady=(4, 0))
     _create_dialog_button(btn_frame, "关闭", top.destroy, "primary").pack(side="right")
 
     top.update_idletasks()
-    _center_dialog(top, theme.root, 440, 310)
+    _center_dialog(top, theme.root, 460, 330)
     top.grab_set()
     top.wait_window()
 

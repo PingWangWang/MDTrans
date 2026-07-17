@@ -51,9 +51,10 @@ def main() -> None:
     from mdtrans.gui._theme_manager import ThemeManager
 
     config = load_config()
-    initial_theme = "darkly" if config.get("theme") == "dark" else "flatly"
+    theme_mode = config.get("theme", "light")
+    initial_theme = "darkly" if theme_mode == "dark" else "flatly"
     style = Style(theme=initial_theme)
-    theme_manager = ThemeManager(style)
+    theme_manager = ThemeManager(style, mode=theme_mode)
 
     # ── 窗口尺寸与居中 ────────────────────────────────────────────────────
     window_width = config.get("window", {}).get("width", 750)
