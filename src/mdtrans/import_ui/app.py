@@ -157,9 +157,8 @@ class ImportPage:
         list_frame.columnconfigure(0, weight=1)
 
         self.file_treeview = ttk.Treeview(
-            list_frame, columns=("filename",), show="headings",
-            height=DEFAULT_LISTBOX_HEIGHT, selectmode="extended")
-        self.file_treeview.heading("filename", text="文件名")
+            list_frame, columns=("filename",), show="",
+            height=DEFAULT_LISTBOX_HEIGHT + 1, selectmode="extended")
         self.file_treeview.column("filename", width=400, minwidth=200)
         self.file_treeview.grid(row=0, column=0, sticky=(tk.W, tk.E))
         list_sb = ttk.Scrollbar(list_frame, orient=tk.VERTICAL, command=self.file_treeview.yview)
