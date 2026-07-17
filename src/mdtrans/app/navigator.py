@@ -85,7 +85,7 @@ class Navigator:
             theme_btn_frame,
             text="🌙 暗色",
             command=self._toggle_theme,
-            width=8,
+            width=10,
         )
         self._theme_btn.pack()
 

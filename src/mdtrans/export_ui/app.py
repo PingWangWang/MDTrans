@@ -196,7 +196,7 @@ class ExportPage:
     # ── 界面子区域 ────────────────────────────────────────────────────────
 
     def _create_file_section(self, mf: ttk.Frame, row: int) -> int:
-        ttk.Label(mf, text="选择 Markdown 文件:", font=("Microsoft YaHei UI", 9)).grid(
+        ttk.Label(mf, text="待转文件:", font=("Microsoft YaHei UI", 9)).grid(
             row=row, column=0, sticky=tk.NW, pady=4, padx=(0, 8))
         ff = ttk.Frame(mf)
         ff.grid(row=row, column=1, sticky=(tk.W, tk.E), pady=4)
@@ -228,7 +228,7 @@ class ExportPage:
         return row + 1
 
     def _create_output_dir_section(self, mf: ttk.Frame, row: int) -> int:
-        ttk.Label(mf, text="选择保存位置:", font=("Microsoft YaHei UI", 9)).grid(
+        ttk.Label(mf, text="保存位置:", font=("Microsoft YaHei UI", 9)).grid(
             row=row, column=0, sticky=tk.W, pady=4, padx=(0, 8))
         sf = ttk.Frame(mf)
         sf.grid(row=row, column=1, sticky=(tk.W, tk.E), pady=4)
@@ -240,7 +240,7 @@ class ExportPage:
         return row + 1
 
     def _create_format_section(self, mf: ttk.Frame, row: int) -> int:
-        ttk.Label(mf, text="选择输出格式:", font=("Microsoft YaHei UI", 9)).grid(
+        ttk.Label(mf, text="输出格式:", font=("Microsoft YaHei UI", 9)).grid(
             row=row, column=0, sticky=tk.W, pady=4, padx=(0, 8))
         cf = ttk.Frame(mf)
         cf.grid(row=row, column=1, sticky=(tk.W, tk.E), pady=4)
@@ -269,7 +269,7 @@ class ExportPage:
         r = 0  # 容器内行号
 
         # ── 模板行 ──
-        self.template_label = ttk.Label(container, text="使用自定义模板:",
+        self.template_label = ttk.Label(container, text="文档模板:",
                                         font=("Microsoft YaHei UI", 9))
         self.template_label.grid(row=r, column=0, sticky=tk.W, pady=4, padx=(0, 8))
         tf = ttk.Frame(container)
@@ -291,7 +291,7 @@ class ExportPage:
         r += 1
 
         # ── Mermaid 转换行 ──
-        self.convert_mermaid_label = ttk.Label(container, text="转换 Mermaid 图表:",
+        self.convert_mermaid_label = ttk.Label(container, text="转换图表:",
                                                font=("Microsoft YaHei UI", 9))
         self.convert_mermaid_label.grid(row=r, column=0, sticky=tk.W, pady=4, padx=(0, 8))
         mf1 = ttk.Frame(container)
@@ -302,7 +302,7 @@ class ExportPage:
         r += 1
 
         # ── Mermaid 保存行 ──
-        self.save_mermaid_label = ttk.Label(container, text="保存 Mermaid 图片:",
+        self.save_mermaid_label = ttk.Label(container, text="保存图片:",
                                             font=("Microsoft YaHei UI", 9))
         self.save_mermaid_label.grid(row=r, column=0, sticky=tk.W, pady=4, padx=(0, 8))
         mf2 = ttk.Frame(container)

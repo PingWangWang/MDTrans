@@ -146,7 +146,7 @@ class ImportPage:
         row = 0
 
         # 文件选择区域 — 使用 ttk.Treeview（与 ExportPage 一致）
-        ttk.Label(mf, text="选择待处理文件:", font=("Microsoft YaHei UI", 9)).grid(
+        ttk.Label(mf, text="待转文件:", font=("Microsoft YaHei UI", 9)).grid(
             row=row, column=0, sticky=tk.NW, pady=4, padx=(0, 8))
         ff = ttk.Frame(mf)
         ff.grid(row=row, column=1, sticky=(tk.W, tk.E), pady=4)
@@ -178,7 +178,7 @@ class ImportPage:
         row += 1
         
         # 选择保存位置
-        ttk.Label(mf, text="选择保存位置:", font=("Microsoft YaHei UI", 9)).grid(
+        ttk.Label(mf, text="保存位置:", font=("Microsoft YaHei UI", 9)).grid(
             row=row, column=0, sticky=tk.W, pady=4, padx=(0, 8))
         sf = ttk.Frame(mf)
         sf.grid(row=row, column=1, sticky=(tk.W, tk.E), pady=4)
@@ -190,7 +190,7 @@ class ImportPage:
         row += 1
 
         # 图片处理方式
-        ttk.Label(mf, text="图片处理方式:", font=("Microsoft YaHei UI", 9)).grid(
+        ttk.Label(mf, text="图片处理:", font=("Microsoft YaHei UI", 9)).grid(
             row=row, column=0, sticky=tk.W, pady=4, padx=(0, 8))
         rf = ttk.Frame(mf)
         rf.grid(row=row, column=1, sticky=tk.W, pady=4)

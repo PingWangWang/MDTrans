@@ -20,7 +20,7 @@ from typing import Any
 
 # 标签列最小宽度（与 ExportPage 最长标签“选择 Markdown 文件:”匹配）
 # 使 ImportPage 与 ExportPage 的左侧标签列宽保持一致
-LABEL_COL_WIDTH: int = 155
+LABEL_COL_WIDTH: int = 70
 
 # DOCX 专属选项区域高度（模板 1 行 + Mermaid 2 行，每行约 30px）
 # 固定容器高度使两 Tab 页上半部编辑区域高度一致，切换格式时不跳变
