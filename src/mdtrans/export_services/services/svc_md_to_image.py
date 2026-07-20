@@ -150,7 +150,7 @@ def _render_html_to_image(
     except ImportError as e:
         if getattr(sys, "frozen", False):
             raise ImportError(
-                "缺少 playwright 模块，打包时未包含。请重新打包并确保 playwright 已加入 hiddenimports。"
+                f"playwright 导入失败: {e}"
             ) from e
         raise ImportError(
             "缺少 playwright 依赖。请运行:\n"

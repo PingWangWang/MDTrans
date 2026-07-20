@@ -1,7 +1,8 @@
 """MDTrans - PyInstaller 打包脚本。
 
 用法:
-    python build/build_exe.py
+    uv run python build/build_exe.py
+    python build/build_exe.py          （已激活虚拟环境时）
 
 构建为单文件 exe，输出到 dist/ 目录。
 """
@@ -11,6 +12,25 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
+
+# 检查是否在虚拟环境中
+_in_venv = hasattr(sys, "real_prefix") or (
+    hasattr(sys, "base_prefix") and sys.base_prefix != sys.prefix
+)
+if not _in_venv:
+    _venv_root = Path(__file__).resolve().parent.parent / ".venv"
+    _hint = ""
+    if _venv_root.is_dir():
+        _hint = "  uv run python build/build_exe.py"
+    else:
+        _hint = "  uv sync && uv run python build/build_exe.py"
+    print(
+        "⚠ 未检测到 Python 虚拟环境。\n"
+        f"请使用 UV 运行:\n"
+        f"    {_hint}",
+        file=sys.stderr,
+    )
+    sys.exit(1)
 
 # 确保 src/ 在 sys.path 中
 _project_root = Path(__file__).resolve().parent.parent
@@ -67,9 +87,11 @@ def main() -> None:
         "mdtrans.export_services.utils.text_utils",
         # 导入
         "mdtrans.import_ui.app",
+        # 拖拽支持
+        "tkinterdnd2",
         # Playwright（系统浏览器截图）
-        "playwright",
         "playwright.sync_api",
+        "playwright.async_api",
     ]
 
     # ── 构建命令行参数 ────────────────────────────────────────────────────
@@ -98,8 +120,12 @@ def main() -> None:
     # ── 收集 reportlab 条码模块（xhtml2pdf 运行时动态导入） ───────────────
     args.append("--collect-submodules=reportlab.graphics.barcode")
     args.append("--collect-submodules=reportlab.pdfbase")
-    # ── 收集 playwright 子模块（系统浏览器截图） ──────────────────────────
-    args.append("--collect-submodules=playwright._impl")
+    # ── 收集 playwright 全部模块+数据（系统浏览器截图） ─────────────────
+    args.append("--collect-all=playwright")
+    args.append("--collect-all=greenlet")
+    args.append("--collect-all=pyee")
+    # ── 收集 tkinterdnd2 拖拽支持 ──────────────────────────────────────
+    args.append("--collect-all=tkinterdnd2")
 
     # ── 排除无关重型包 ──────────────────────────────────────────────────
     # 这些包不在项目依赖中，但 PyInstaller 会因 hook 扫描而误扫，拖慢打包
@@ -118,9 +144,6 @@ def main() -> None:
         "gi",  # GObject Introspection (Linux only)
         "nvidia", "cupy",  # GPU 相关
         "PIL.SpiderImagePlugin",  # 非必要 PIL 插件
-        # Playwright 浏览器下载驱动（使用系统浏览器，不下载）
-        "playwright._impl._driver",
-        "playwright._impl._driver_server",
     ]
     for mod in exclude_modules:
         args.append(f"--exclude-module={mod}")

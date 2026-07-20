@@ -156,7 +156,7 @@ uv run pytest
 uv run ruff check src/
 
 # 打包为单文件 exe
-python build/build_exe.py
+uv run python build/build_exe.py
 ```
 
 打包产物位于 `dist/MDTrans_v1.0.0.exe`，可直接分发给无需 Python 环境的 Windows 用户。

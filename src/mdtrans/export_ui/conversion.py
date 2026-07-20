@@ -211,7 +211,9 @@ class ConversionService:
             else:
                 raise ValueError(f"不支持的输出格式: {format_code}")
         except ImportError as e:
-            raise RuntimeError(f"缺少必要模块: {e}\n请运行 uv sync 安装依赖") from e
+            cause = getattr(e, '__cause__', None) or getattr(e, '__context__', None)
+            detail = f" ({cause})" if cause else ""
+            raise RuntimeError(f"缺少必要模块: {e}{detail}\n请运行 uv sync 安装依赖") from e
 
     def _convert_to_docx(self, md_text: str, output_file: Path, options: ConversionOptions) -> None:
         """转换 Markdown 到 DOCX，支持 Mermaid 图片渲染。"""

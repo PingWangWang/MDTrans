@@ -8,5 +8,5 @@ MDTrans — 双向文档转换工具
 
         python scripts/sync_version.py
 """
-__version__ = "1.2.3"
-__version_info__ = (1, 2, 3)
+__version__ = "1.2.9"
+__version_info__ = (1, 2, 9)
