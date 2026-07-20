@@ -74,6 +74,7 @@ dmypy.json
 # --- 编辑器和 IDE ---
 .idea/
 .vscode/
+.kun
 tempCodeRunnerFile.py
 
 # --- 代码检查工具 ---

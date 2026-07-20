@@ -1,12 +1,12 @@
 {
-  "theme": "dark",
+  "theme": "light",
   "import": {
     "last_output_dir": "",
     "image_mode": "embed"
   },
   "export": {
     "last_output_dir": "",
-    "last_format": "DOCX",
+    "last_format": "HTML",
     "use_template": false,
     "template_path": "",
     "convert_mermaid": true,

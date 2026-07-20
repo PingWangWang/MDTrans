@@ -295,7 +295,17 @@ class ExportPage:
         mf1 = ttk.Frame(container)
         mf1.grid(row=r, column=1, sticky=tk.W, pady=4)
         ttk.Checkbutton(mf1, text="", variable=self.convert_mermaid_images).pack(
-            side=tk.LEFT, padx=(0, 8))
+            side=tk.LEFT, padx=(0, 4))
+        # 提示文本：灰色小字说明该功能依赖在线服务
+        self.mermaid_hint_label = ttk.Label(mf1, text="需访问 mermaid.ink 在线渲染",
+                                            font=("Microsoft YaHei UI", 8),
+                                            foreground="#888888")
+        self.mermaid_hint_label.pack(side=tk.LEFT, padx=(0, 8))
+        # 网络检测按钮
+        self.test_mermaid_btn = ttk.Button(
+            mf1, text="测试网络", command=self._test_mermaid_connectivity,
+            style="info.TButton", width=8)
+        self.test_mermaid_btn.pack(side=tk.LEFT)
         self.convert_mermaid_frame = mf1
         r += 1
 
@@ -320,15 +330,30 @@ class ExportPage:
     # ── 交互回调 ────────────────────────────────────────────────────────────
 
     def on_format_change(self, event: tk.Event | None = None) -> None:
+        """切换输出格式时，显隐对应的选项行。"""
         output_format = self.get_selected_format()
-        visible = output_format == "DOCX"
-        for child in self._docx_frame.winfo_children():
-            child.grid() if visible else child.grid_remove()
-        if not visible:
+        is_docx = output_format == "DOCX"
+        is_pdf = output_format == "PDF"
+
+        # 模板行：仅 DOCX 可见
+        self.template_label.grid() if is_docx else self.template_label.grid_remove()
+        self.template_frame.grid() if is_docx else self.template_frame.grid_remove()
+
+        # 转换 Mermaid 行：DOCX 和 PDF 均可见
+        show_mermaid = is_docx or is_pdf
+        self.convert_mermaid_label.grid() if show_mermaid else self.convert_mermaid_label.grid_remove()
+        self.convert_mermaid_frame.grid() if show_mermaid else self.convert_mermaid_frame.grid_remove()
+
+        # 保存图片行：仅 DOCX 可见（PDF 无需持久化）
+        self.save_mermaid_label.grid() if is_docx else self.save_mermaid_label.grid_remove()
+        self.save_mermaid_frame.grid() if is_docx else self.save_mermaid_frame.grid_remove()
+
+        # DOCX 相关的选项重置
+        if not is_docx:
             self.use_template.set(False)
             self.template_path.set("")
             self.save_mermaid_images.set(False)
-            self.convert_mermaid_images.set(True)
+        # convert_mermaid_images 保持用户选择，不重置
 
     def on_template_toggle(self) -> None:
         if self.use_template.get():
@@ -509,5 +534,28 @@ class ExportPage:
             self.open_doc_button.configure(state="normal")
         else:
             self.open_doc_button.configure(state="disabled")
+
+    # ── Mermaid 网络检测 ──────────────────────────────────────────────────────
+
+    def _test_mermaid_connectivity(self) -> None:
+        """在独立线程中测试 mermaid.ink 连通性，不阻塞 GUI。"""
+        self.test_mermaid_btn.configure(state="disabled", text="测试中…")
+        t = threading.Thread(target=self._do_test_mermaid, daemon=True)
+        t.start()
+
+    def _do_test_mermaid(self) -> None:
+        """执行网络检测的实际逻辑（在子线程中运行）。"""
+        from mdtrans.export_services.utils.mermaid_utils import test_mermaid_service
+        try:
+            ok, msg = test_mermaid_service()
+        except Exception as e:
+            ok, msg = False, f"测试异常: {e}"
+        self.root.after(0, lambda: self._on_test_result(msg, ok))
+
+    def _on_test_result(self, msg: str, success: bool) -> None:
+        """处理网络检测结果，恢复按钮状态。"""
+        tag = "success" if success else "error"
+        self.log_message(msg, tag=tag)
+        self.test_mermaid_btn.configure(state="normal", text="测试网络")
 
 

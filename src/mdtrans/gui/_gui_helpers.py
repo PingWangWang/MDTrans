@@ -24,7 +24,7 @@ LABEL_COL_WIDTH: int = 70
 
 # DOCX 专属选项区域高度（模板 1 行 + Mermaid 2 行，每行约 30px）
 # 固定容器高度使两 Tab 页上半部编辑区域高度一致，切换格式时不跳变
-DOCX_OPTIONS_HEIGHT: int = 95
+DOCX_OPTIONS_HEIGHT: int = 130
 
 # 日志 ScrolledText 默认行数
 DEFAULT_LOG_HEIGHT: int = 7

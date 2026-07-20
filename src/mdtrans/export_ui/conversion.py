@@ -192,7 +192,10 @@ class ConversionService:
                 self._convert_to_docx(md_text, output_file, options)
             elif format_code == "PDF":
                 from mdtrans.export_services.services import svc_md_to_pdf
-                svc_md_to_pdf.convert_md_to_pdf(md_text, output_file)
+                svc_md_to_pdf.convert_md_to_pdf(
+                    md_text, output_file,
+                    convert_mermaid=options.convert_mermaid_images,
+                )
             elif format_code == "HTML":
                 from mdtrans.export_services.services import svc_md_to_html
                 svc_md_to_html.convert_md_to_html(md_text, output_file)
