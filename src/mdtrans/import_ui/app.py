@@ -8,6 +8,7 @@ ThemeManager 主题联动等。
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import sys
 import threading
@@ -496,7 +497,10 @@ class ImportPage:
                     self.log_message(f"  ✗ 已跳过: {output_file.name}")
                     return
 
-            output_file.write_text(result.text_content, encoding="utf-8")
+            text = result.text_content
+            if ext in (".docx",) and mode == "embed":
+                text = self._convert_data_uris_to_references(text)
+            output_file.write_text(text, encoding="utf-8")
             self.last_output_file = str(output_file)
         except ImportError as e:
             raise RuntimeError(f"模块导入失败: {e}") from e
@@ -560,6 +564,64 @@ class ImportPage:
                 del docx_mod.DocxConverter._orig_convert
         except ImportError:
             pass
+
+    @staticmethod
+    def _convert_data_uris_to_references(md_text: str) -> str:
+        """将 Markdown 中的内联 data URI 图片转为引用式链接。
+
+        data URI 图片移至文件末尾的统一引用块中，正文使用引用式语法。
+
+        转换前:
+            ![架构图](data:image/png;base64,iVBOR...)
+        转换后:
+            ![架构图][img-1]
+            ...
+            <!-- Embedded Images -->
+            [img-1]: data:image/png;base64,iVBOR...
+
+        Args:
+            md_text: 原始 Markdown 文本
+
+        Returns:
+            转换后的 Markdown 文本
+        """
+        lines = md_text.split("\n")
+        inside_code_block = False
+        refs: list[str] = []
+        ref_counter = 0
+        new_lines: list[str] = []
+        img_pattern = re.compile(r'!\[([^\]]*)\]\((data:[^)]+)\)')
+
+        for line in lines:
+            stripped = line.strip()
+            # 检测 fenced code block 边界，跳过代码块内的内容
+            if stripped.startswith("```"):
+                inside_code_block = not inside_code_block
+                new_lines.append(line)
+                continue
+            if inside_code_block:
+                new_lines.append(line)
+                continue
+
+            # 替换行内 data URI 图片为引用式语法
+            def _replace(m: re.Match) -> str:
+                nonlocal ref_counter
+                ref_counter += 1
+                alt = m.group(1)
+                data_uri = m.group(2)
+                ref_name = f"img-{ref_counter}"
+                refs.append(f"[{ref_name}]: {data_uri}")
+                return f"![{alt}][{ref_name}]"
+
+            new_lines.append(img_pattern.sub(_replace, line))
+
+        if refs:
+            new_lines.append("")
+            new_lines.append("<!-- Embedded Images -->")
+            new_lines.extend(refs)
+            new_lines.append("")
+
+        return "\n".join(new_lines)
 
     def processing_complete(self) -> None:
         self.is_processing = False
