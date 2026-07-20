@@ -66,14 +66,8 @@ mdtrans
 1. 切换到 **📤 To DOCX/PDF/HTML** 页
 2. 添加 Markdown 文件（支持批量）
 3. 选择输出格式为 **DOCX**
-4. （可选）勾选"转换 Mermaid 图表"，表格中的 Mermaid 代码块将被渲染为图片嵌入
+4. （可选）勾选"转换图表"，表格中的 Mermaid 代码块将被渲染为图片嵌入
 5. 点击"开始导出"，自动应用中文排版样式
-
-### 导出：使用自定义 Word 模板
-
-1. 准备一个 `.docx` 模板（包含你想要的样式定义）
-2. 在导出页勾选"使用模板"，选择模板文件
-3. 导出时 MDTrans 会基于该模板样式生成文档
 
 ## 📁 项目结构
 
@@ -143,7 +137,7 @@ MDTrans/
 
 | 格式 | 说明 | 特色 |
 |------|------|------|
-| **DOCX** | Word 文档 | 中文排版样式、自定义模板、Mermaid 图表渲染 |
+| **DOCX** | Word 文档 | 中文排版样式、Mermaid 图表渲染 |
 | **PDF** | PDF 文档 | 基于 xhtml2pdf 渲染 |
 | **HTML** | HTML 网页 | 干净可发布的 HTML 输出 |
 
@@ -177,7 +171,6 @@ python build/build_exe.py
   },
   "export": {
     "last_format": "DOCX",       // 默认导出格式
-    "use_template": false,       // 是否使用自定义模板
     "convert_mermaid": true      // 是否渲染 Mermaid 图表
   },
   "window": {

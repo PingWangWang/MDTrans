@@ -67,8 +67,6 @@ class ExportPage:
         self.is_processing: bool = False
         self.last_output_file: str | None = None
         self.last_single_output: str | None = None
-        self.use_template = tk.BooleanVar(value=config.get("use_template", False))
-        self.template_path = tk.StringVar(value=config.get("template_path", ""))
         self.save_mermaid_images = tk.BooleanVar(value=config.get("save_mermaid_images", False))
         self.convert_mermaid_images = tk.BooleanVar(value=config.get("convert_mermaid_images", True))
 
@@ -87,8 +85,6 @@ class ExportPage:
         """页面被停用时保存配置。"""
         self._config["last_output_dir"] = self.output_dir.get()
         self._config["last_format"] = self.get_selected_format()
-        self._config["use_template"] = self.use_template.get()
-        self._config["template_path"] = self.template_path.get()
         self._config["save_mermaid_images"] = self.save_mermaid_images.get()
         self._config["convert_mermaid_images"] = self.convert_mermaid_images.get()
 
@@ -250,7 +246,7 @@ class ExportPage:
         return row + 1
 
     def _create_docx_options_section(self, mf: ttk.Frame, row: int) -> int:
-        """创建 DOCX 专属选项区域（模板 + Mermaid 设置）。
+        """创建导出选项区域（Mermaid 设置）。
 
         使用固定高度容器统一占位，使两 Tab 页上半部编辑区域高度一致；
         切换输出格式时容器始终保留高度，仅显隐内部子控件。
@@ -265,28 +261,6 @@ class ExportPage:
         self._docx_frame = container
 
         r = 0  # 容器内行号
-
-        # ── 模板行 ──
-        self.template_label = ttk.Label(container, text="文档模板:",
-                                        font=("Microsoft YaHei UI", 9))
-        self.template_label.grid(row=r, column=0, sticky=tk.W, pady=4, padx=(0, 8))
-        tf = ttk.Frame(container)
-        tf.grid(row=r, column=1, sticky=(tk.W, tk.E), pady=4)
-        tf.columnconfigure(1, weight=1)
-        self.template_check = ttk.Checkbutton(tf, text="", variable=self.use_template,
-                                              command=self.on_template_toggle)
-        self.template_check.grid(row=0, column=0, padx=(0, 4))
-        self.template_path_entry = ttk.Entry(tf, textvariable=self.template_path,
-                                             state="readonly")
-        self.template_path_entry.grid(row=0, column=1, sticky=(tk.W, tk.E), padx=(0, 4))
-        self.select_template_btn = ttk.Button(
-            tf, text="选择模板", command=self.select_template,
-            state="disabled", style="primary.TButton", width=10)
-        self.select_template_btn.grid(row=0, column=2)
-        self.template_frame = tf
-        if not self.use_template.get():
-            self.select_template_btn.configure(state="disabled")
-        r += 1
 
         # ── Mermaid 转换行 ──
         self.convert_mermaid_label = ttk.Label(container, text="转换图表:",
@@ -335,10 +309,6 @@ class ExportPage:
         is_docx = output_format == "DOCX"
         is_pdf = output_format == "PDF"
 
-        # 模板行：仅 DOCX 可见
-        self.template_label.grid() if is_docx else self.template_label.grid_remove()
-        self.template_frame.grid() if is_docx else self.template_frame.grid_remove()
-
         # 转换 Mermaid 行：DOCX 和 PDF 均可见
         show_mermaid = is_docx or is_pdf
         self.convert_mermaid_label.grid() if show_mermaid else self.convert_mermaid_label.grid_remove()
@@ -350,25 +320,8 @@ class ExportPage:
 
         # DOCX 相关的选项重置
         if not is_docx:
-            self.use_template.set(False)
-            self.template_path.set("")
             self.save_mermaid_images.set(False)
         # convert_mermaid_images 保持用户选择，不重置
-
-    def on_template_toggle(self) -> None:
-        if self.use_template.get():
-            self.select_template_btn.configure(state="normal")
-        else:
-            self.select_template_btn.configure(state="disabled")
-            self.template_path.set("")
-
-    def select_template(self) -> None:
-        template = filedialog.askopenfilename(
-            title="选择 DOCX 模板文件",
-            filetypes=[("Word 模板文件", "*.docx"), ("所有文件", "*.*")])
-        if template:
-            self.template_path.set(template)
-            self.log_message(f"已选择模板: {Path(template).name}")
 
     def on_drop(self, event: Any) -> None:
         """处理拖拽放入的文件（由 Navigator.handle_drop 或 Treeview 本地事件调用）。
@@ -513,8 +466,6 @@ class ExportPage:
         try:
             options = ConversionOptions(
                 format_code=self.get_selected_format(),
-                use_template=self.use_template.get(),
-                template_path=self.template_path.get(),
                 save_mermaid_images=self.save_mermaid_images.get(),
                 convert_mermaid_images=self.convert_mermaid_images.get(),
             )

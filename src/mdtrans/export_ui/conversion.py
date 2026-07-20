@@ -40,8 +40,6 @@ class OverwriteStrategy(Protocol):
 class ConversionOptions:
     """转换选项。"""
     format_code: str = "DOCX"
-    use_template: bool = False
-    template_path: str = ""
     save_mermaid_images: bool = False
     convert_mermaid_images: bool = False
 
@@ -205,22 +203,11 @@ class ConversionService:
             raise RuntimeError(f"缺少必要模块: {e}\n请运行 uv sync 安装依赖") from e
 
     def _convert_to_docx(self, md_text: str, output_file: Path, options: ConversionOptions) -> None:
-        """转换 Markdown 到 DOCX，支持自定义模板和 Mermaid 图片。"""
+        """转换 Markdown 到 DOCX，支持 Mermaid 图片渲染。"""
         from mdtrans.export_services.services import svc_md_to_docx
-        template: Path | None = None
-        if options.use_template and options.template_path:
-            t = Path(options.template_path)
-            if t.exists():
-                self._log(f"  使用自定义模板: {t.name}")
-                template = t
-            else:
-                self._log("  ⚠ 模板文件不存在，使用默认模板")
-        elif options.use_template:
-            self._log("  未选择模板文件，使用默认模板")
         svc_md_to_docx.convert_md_to_docx(
             md_text=md_text,
             output_path=output_file,
-            template_path=template,
             convert_mermaid=options.convert_mermaid_images,
             save_mermaid_images=options.save_mermaid_images,
             output_dir=output_file.parent,

@@ -38,8 +38,6 @@ DEFAULT_CONFIG: dict = {
     "export": {
         "last_output_dir": "",
         "last_format": "docx",
-        "use_template": False,
-        "template_path": "",
         "convert_mermaid": True,
         "save_mermaid_images": False,
     },

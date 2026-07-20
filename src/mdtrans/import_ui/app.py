@@ -459,7 +459,9 @@ class ImportPage:
                     images_dir = Path(self.output_dir.get()) / f"{stem}_images"
                     convert_kwargs["docx_images_dir"] = str(images_dir)
                 elif mode == "embed":
+                    # 标记为 embed 模式，后续会通过 mammoth data URI 处理
                     convert_kwargs["docx_embed_images"] = True
+                    convert_kwargs["keep_data_uris"] = True
             elif ext in (".pptx",):
                 if mode == "file":
                     images_dir = Path(self.output_dir.get()) / f"{stem}_images"
@@ -476,7 +478,17 @@ class ImportPage:
                 if mode == "embed":
                     convert_kwargs["keep_data_uris"] = True
 
-            result = MarkItDown().convert(file_path, **convert_kwargs)
+            # DOCX embed 模式：修补 DocxConverter，让 mammoth 生成 data URI
+            _restore_patch = False
+            if ext in (".docx",) and mode == "embed":
+                _restore_patch = self._patch_docx_converter_for_embed()
+
+            try:
+                result = MarkItDown().convert(file_path, **convert_kwargs)
+            finally:
+                if _restore_patch:
+                    self._unpatch_docx_converter()
+
             output_file = Path(self.output_dir.get()) / f"{stem}.md"
             self.log_message(f"  → 保存结果到: {output_file}")
 
@@ -496,6 +508,64 @@ class ImportPage:
             raise RuntimeError(f"模块导入失败: {e}") from e
         except Exception as e:
             raise RuntimeError(f"转换文件 {file_path} 失败: {e}") from e
+
+    # ── DOCX 图片嵌入修补 ─────────────────────────────────────────────────────
+
+    @staticmethod
+    def _patch_docx_converter_for_embed() -> bool:
+        """修补 markitdown 的 DocxConverter，使 mammoth 将图片渲染为 data URI。
+
+        当 convert_kwargs 含 docx_embed_images=True 时，使用
+        mammoth.images.data_uri() 作为图片处理器，生成 data:image/... 引用，
+        配合 keep_data_uris=True 确保 _CustomMarkdownify 不截断。
+
+        Returns:
+            是否修补成功。成功返回 True，后续应调用 _unpatch_docx_converter。
+        """
+        try:
+            import markitdown.converters._docx_converter as docx_mod
+            from markitdown.converter_utils.docx.pre_process import pre_process_docx
+
+            if hasattr(docx_mod.DocxConverter, "_patched") and docx_mod.DocxConverter._patched:
+                return False  # 已修补，无需重复
+
+            _orig_convert = docx_mod.DocxConverter.convert
+
+            def _patched_convert(self, file_stream, stream_info, **kwargs):
+                if kwargs.get("docx_embed_images"):
+                    # 使用 data URI 图片处理器渲染 DOCX 中的图片
+                    pre_processed = pre_process_docx(file_stream)
+                    html = docx_mod.mammoth.convert_to_html(
+                        pre_processed,
+                        style_map=kwargs.get("style_map"),
+                        convert_image=docx_mod.mammoth.images.data_uri,
+                    ).value
+                    # 弹出已显式传出的参数，避免与 **kwargs 冲突
+                    kwargs.pop("keep_data_uris", None)
+                    # 传出 keep_data_uris=True，确保 _CustomMarkdownify 不截断
+                    return self._html_converter.convert_string(
+                        html, keep_data_uris=True, **kwargs,
+                    )
+                return _orig_convert(self, file_stream, stream_info, **kwargs)
+
+            docx_mod.DocxConverter.convert = _patched_convert
+            docx_mod.DocxConverter._patched = True
+            docx_mod.DocxConverter._orig_convert = _orig_convert
+            return True
+        except ImportError:
+            return False
+
+    @staticmethod
+    def _unpatch_docx_converter() -> None:
+        """恢复 DocxConverter 的原始 convert 方法。"""
+        try:
+            import markitdown.converters._docx_converter as docx_mod
+            if hasattr(docx_mod.DocxConverter, "_orig_convert"):
+                docx_mod.DocxConverter.convert = docx_mod.DocxConverter._orig_convert
+                docx_mod.DocxConverter._patched = False
+                del docx_mod.DocxConverter._orig_convert
+        except ImportError:
+            pass
 
     def processing_complete(self) -> None:
         self.is_processing = False

@@ -14,7 +14,6 @@ Markdown -> DOCX 转换服务
 设计说明
 --------
 - 入口函数：`convert_md_to_docx()`
-- 默认模板定位：`get_default_template()`
 - 样式处理主流程：`_apply_formatting()` -> `_step1_*` / `_step2_*` / `_step3_*`
 - 本模块避免直接暴露 docx XML 细节给上层调用者，相关复杂逻辑均封装在私有函数中。
 """
@@ -912,20 +911,16 @@ def _step3_apply_to_content(doc) -> None:
 
 
 def _build_pandoc_extra_args(
-    template_path: Path | None,
     is_enable_toc: bool,
     resource_paths: list[str] | None = None,
 ) -> list[str]:
     """构建 Pandoc 参数列表。
 
     包含：
-    - `--reference-doc`：参考模板
     - `--toc`：目录开关
     - `--resource-path`：资源搜索路径（图片等）
     """
     extra_args: list[str] = []
-    if template_path and template_path.exists():
-        extra_args.append(f"--reference-doc={template_path}")
     if is_enable_toc:
         extra_args.append("--toc")
     if resource_paths:
@@ -936,13 +931,11 @@ def _build_pandoc_extra_args(
 def _convert_markdown_file_to_docx(
     source_md_file: Path,
     output_path: Path,
-    template_path: Path | None,
     is_enable_toc: bool,
     resource_paths: list[str] | None = None,
 ) -> None:
-    """将单个 Markdown 文件转换为 DOCX，并按需应用默认格式化。"""
-    final_template_path = template_path or get_default_template()
-    extra_args = _build_pandoc_extra_args(final_template_path, is_enable_toc, resource_paths)
+    """将单个 Markdown 文件转换为 DOCX，并应用默认格式化。"""
+    extra_args = _build_pandoc_extra_args(is_enable_toc, resource_paths)
 
     pandoc_convert_file(
         source_file=str(source_md_file),
@@ -952,10 +945,7 @@ def _convert_markdown_file_to_docx(
         extra_args=extra_args,
     )
 
-    if not template_path:
-        _apply_formatting(output_path)
-    else:
-        logger.info(f"Using custom template, skipping formatting: {template_path}")
+    _apply_formatting(output_path)
 
 
 # ---------------------------------------------------------------------------
@@ -981,7 +971,6 @@ def _apply_formatting(docx_path: Path) -> None:
 def convert_md_to_docx(
     md_text: str,
     output_path: Path,
-    template_path: Path | None = None,
     is_strip_wrapper: bool = False,
     is_enable_toc: bool = False,
     convert_mermaid: bool = True,
@@ -994,7 +983,6 @@ def convert_md_to_docx(
     Args:
         md_text: 输入 Markdown 文本
         output_path: 输出 DOCX 路径
-        template_path: 自定义 DOCX 模板（可选）
         is_strip_wrapper: 是否剥离代码块包装
         is_enable_toc: 是否启用目录
         convert_mermaid: 是否启用 Mermaid 转图片
@@ -1071,7 +1059,6 @@ def convert_md_to_docx(
                 _convert_markdown_file_to_docx(
                     source_md_file=temp_md_file,
                     output_path=output_path,
-                    template_path=template_path,
                     is_enable_toc=is_enable_toc,
                     resource_paths=resource_paths,
                 )
@@ -1102,15 +1089,8 @@ def convert_md_to_docx(
             _convert_markdown_file_to_docx(
                 source_md_file=temp_md_file,
                 output_path=output_path,
-                template_path=template_path,
                 is_enable_toc=is_enable_toc,
             )
 
 
-def get_default_template() -> Path | None:
-    """返回内置 DOCX 模板路径；若不存在则返回 `None`。"""
-    template = Path(__file__).resolve().parent.parent / "assets" / "template" / "docx_template.docx"
-    if template.exists():
-        return template
-    logger.warning(f"Default DOCX template not found at {template}")
-    return None
+
