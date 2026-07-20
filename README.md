@@ -25,6 +25,8 @@ uv sync
 pip install -e .
 ```
 
+> 💡 **图片导出**：功能将使用系统已安装的 Microsoft Edge 或 Google Chrome 浏览器，无需额外下载。
+
 可选扩展：
 
 ```bash
@@ -37,11 +39,11 @@ uv sync --extra all
 ## 🚀 快速开始
 
 ```bash
-# 启动 GUI
-python run.py
+# 启动 GUI（推荐，自动使用虚拟环境）
+uv run python run.py
 
 # 或作为模块启动
-python -m mdtrans
+uv run python -m mdtrans
 
 # 或通过已安装的命令行入口
 mdtrans

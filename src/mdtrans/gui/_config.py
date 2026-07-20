@@ -40,6 +40,12 @@ DEFAULT_CONFIG: dict = {
         "last_format": "docx",
         "convert_mermaid": True,
         "save_mermaid_images": False,
+        "image": {
+            "format": "png",
+            "page_count": 1,
+            "dpi": 96,
+            "background": "white",
+        },
     },
     "window": {
         "width": 750,

@@ -17,6 +17,7 @@ OUTPUT_FORMATS: dict[str, tuple[str, str]] = {
     "DOCX": ("Word 文档", ".docx"),
     "PDF": ("PDF 文档", ".pdf"),
     "HTML": ("HTML 网页", ".html"),
+    "IMAGE": ("图片", ".png"),
 }
 
 
@@ -42,6 +43,14 @@ class ConversionOptions:
     format_code: str = "DOCX"
     save_mermaid_images: bool = False
     convert_mermaid_images: bool = False
+    # 图片专属选项
+    image_format: str = "png"
+    image_quality: int = 100
+    image_page_count: int = 1
+    image_width: int = 1200
+    image_dpi: int = 96
+    image_background: str = "white"
+    image_padding: int = 40
 
 
 @dataclass
@@ -197,6 +206,8 @@ class ConversionService:
             elif format_code == "HTML":
                 from mdtrans.export_services.services import svc_md_to_html
                 svc_md_to_html.convert_md_to_html(md_text, output_file)
+            elif format_code == "IMAGE":
+                self._convert_to_image(md_text, output_file, options)
             else:
                 raise ValueError(f"不支持的输出格式: {format_code}")
         except ImportError as e:
@@ -213,6 +224,38 @@ class ConversionService:
             output_dir=output_file.parent,
         )
 
+    def _convert_to_image(self, md_text: str, output_file: Path, options: ConversionOptions) -> None:
+        """转换 Markdown 到图片，输出多页图片文件。
+
+        ``output_file`` 仅用于推导目录和前缀名（扩展名被忽略）。
+        实际输出文件为 ``{stem}_p001.png``、``{stem}_p002.png`` 等。
+        """
+        from mdtrans.export_services.services.svc_md_to_image import (
+            ImageOptions,
+            convert_md_to_image,
+        )
+
+        img_options = ImageOptions(
+            image_format=options.image_format,
+            quality=options.image_quality,
+            page_count=options.image_page_count,
+            image_width=options.image_width,
+            dpi=options.image_dpi,
+            background_color=options.image_background,
+            padding=options.image_padding,
+            convert_mermaid=options.convert_mermaid_images,
+        )
+        saved = convert_md_to_image(
+            md_text=md_text,
+            output_stem=output_file.stem,
+            output_dir=str(output_file.parent),
+            options=img_options,
+            log_callback=self._log,
+        )
+        # 存储第一张图片路径供"打开文件"按钮使用
+        if saved:
+            self._state.last_output_file = str(saved[0])
+
     def convert_single_file(
         self, file_path: str, output_dir: str, options: ConversionOptions,
         *, max_retries: int = 3, is_batch: bool = False,
@@ -226,8 +269,10 @@ class ConversionService:
                 if not self.check_file_exists_and_overwrite(output_file, is_batch=is_batch):
                     return None
                 self.execute_conversion(md_text, output_file, options)
-                self._state.last_output_file = str(output_file)
-                return str(output_file)
+                # IMAGE 格式在 _convert_to_image 内部已设置 last_output_file 为实际图片路径
+                if options.format_code != "IMAGE":
+                    self._state.last_output_file = str(output_file)
+                return self._state.last_output_file or str(output_file)
             except (FileNotFoundError, PermissionError) as e:
                 raise RuntimeError(str(e)) from e
             except Exception as e:

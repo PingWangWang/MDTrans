@@ -69,6 +69,13 @@ class ExportPage:
         self.save_mermaid_images = tk.BooleanVar(value=config.get("save_mermaid_images", False))
         self.convert_mermaid_images = tk.BooleanVar(value=config.get("convert_mermaid_images", True))
 
+        # 图片导出选项
+        img_cfg = config.get("image", {})
+        self.image_format = tk.StringVar(value=img_cfg.get("format", "png"))
+        self.image_page_count = tk.IntVar(value=img_cfg.get("page_count", 1))
+        self.image_dpi = tk.IntVar(value=img_cfg.get("dpi", 96))
+        self.image_background = tk.StringVar(value=img_cfg.get("background", "white"))
+
         self._conversion: ConversionService | None = None
         self._setup_gui_logging()
         self._create_conversion_service()
@@ -86,6 +93,12 @@ class ExportPage:
         self._config["last_format"] = self.get_selected_format()
         self._config["save_mermaid_images"] = self.save_mermaid_images.get()
         self._config["convert_mermaid_images"] = self.convert_mermaid_images.get()
+        self._config["image"] = {
+            "format": self._get_image_format_code(),
+            "page_count": max(1, self.image_page_count.get()),
+            "dpi": self.image_dpi.get(),
+            "background": self._get_image_bg_code(),
+        }
 
     def destroy(self) -> None:
         """销毁页面。"""
@@ -165,6 +178,8 @@ class ExportPage:
         row = self._create_output_dir_section(mf, row)
         row = self._create_format_section(mf, row)
         row = self._create_docx_options_section(mf, row)
+        # 图片选项与 DOCX 选项共用同一行，互斥显示（避免切换时出现空白行）
+        self._create_image_options_section(mf, row - 1)
         # 分隔线 + 操作按钮（与 ImportPage 共享布局）
         row, self.process_button, self.open_doc_button = create_action_buttons(
             mf, row,
@@ -236,11 +251,35 @@ class ExportPage:
             row=row, column=0, sticky=tk.W, pady=4, padx=(0, 8))
         cf = ttk.Frame(mf)
         cf.grid(row=row, column=1, sticky=(tk.W, tk.E), pady=4)
-        format_list = [f"{desc} ({ext})" for desc, ext in OUTPUT_FORMATS.values()]
+        # 输出格式下拉列表：IMAGE 不带后缀（因图片格式可独立设置）
+        format_list = [
+            desc if code == "IMAGE" else f"{desc} ({ext})"
+            for code, (desc, ext) in OUTPUT_FORMATS.items()
+        ]
         self.format_combo = ttk.Combobox(cf, values=format_list, state="readonly", width=30)
         self.format_combo.set("Word 文档 (.docx)")
-        self.format_combo.grid(row=0, column=0, sticky=tk.W, padx=(0, 6))
+        self.format_combo.grid(row=0, column=0, sticky=tk.W, padx=(0, 12))
         self.format_combo.bind("<<ComboboxSelected>>", self.on_format_change)
+
+        # ── 图片格式选择（仅 IMAGE 格式时可见，放在输出格式右侧）──
+        self.image_fmt_sep = ttk.Label(cf, text="    ", font=("Microsoft YaHei UI", 9))
+        self.image_fmt_sep.grid(row=0, column=1, padx=(0, 4))
+        self.image_format_combo = ttk.Combobox(
+            cf, values=["PNG", "JPEG", "WebP", "BMP", "TIFF"],
+            state="readonly", width=8)
+        fmt_map = {"png": 0, "jpeg": 1, "webp": 2, "bmp": 3, "tiff": 4}
+        self.image_format_combo.current(fmt_map.get(self.image_format.get(), 0))
+        self.image_format_combo.grid(row=0, column=2, sticky=tk.W)
+        # 格式说明标签（下拉选择右侧）
+        self.image_fmt_hint = ttk.Label(cf, text="无损格式", font=("Microsoft YaHei UI", 8),
+                                        foreground="#888888")
+        self.image_fmt_hint.grid(row=0, column=3, sticky=tk.W, padx=(4, 0))
+        self.image_format_combo.bind("<<ComboboxSelected>>", self._on_image_format_change)
+        # 初始隐藏（默认非 IMAGE 格式）
+        self.image_fmt_sep.grid_remove()
+        self.image_format_combo.grid_remove()
+        self.image_fmt_hint.grid_remove()
+
         return row + 1
 
     def _create_docx_options_section(self, mf: ttk.Frame, row: int) -> int:
@@ -296,6 +335,67 @@ class ExportPage:
 
         return row + 1
 
+    # ── 图片选项区域 ──────────────────────────────────────────────────────
+
+    def _create_image_options_section(self, mf: ttk.Frame, row: int) -> int:
+        """创建图片导出专属设置面板。
+
+        仅在输出格式为 IMAGE 时显示。布局风格与 ``_create_docx_options_section``
+        保持一致：固定高度容器、pady=4、标签字体 9pt。
+
+        与 ``_docx_frame`` 互斥显示，通过 ``on_format_change`` 切换。
+        """
+        from mdtrans.gui._gui_helpers import IMAGE_OPTIONS_HEIGHT, LABEL_COL_WIDTH
+
+        container = ttk.Frame(mf, height=IMAGE_OPTIONS_HEIGHT)
+        container.grid(row=row, column=0, columnspan=2, sticky=(tk.W, tk.E))
+        container.grid_propagate(False)
+        container.columnconfigure(0, minsize=LABEL_COL_WIDTH)
+        container.columnconfigure(1, weight=1)
+        self._image_frame = container
+
+        r = 0
+
+        # ── 图片张数 ──
+        ttk.Label(container, text="图片张数:", font=("Microsoft YaHei UI", 9)).grid(
+            row=r, column=0, sticky=tk.W, pady=4, padx=(0, 8))
+        pf = ttk.Frame(container)
+        pf.grid(row=r, column=1, sticky=(tk.W, tk.E), pady=4)
+        self.image_page_spin = ttk.Spinbox(
+            pf, from_=1, to=50, width=8,
+            textvariable=self.image_page_count)
+        self.image_page_spin.grid(row=0, column=0, sticky=tk.W, padx=(0, 6))
+        self.image_page_spin.bind("<<Increment>>", self._on_image_page_change)
+        self.image_page_spin.bind("<<Decrement>>", self._on_image_page_change)
+        ttk.Label(pf, text="张（均匀切分）", font=("Microsoft YaHei UI", 8),
+                  foreground="#888888").grid(row=0, column=1, sticky=tk.W)
+        r += 1
+
+        # ── 背景颜色 + DPI（同一行）──
+        ttk.Label(container, text="背景颜色:", font=("Microsoft YaHei UI", 9)).grid(
+            row=r, column=0, sticky=tk.W, pady=4, padx=(0, 8))
+        bf = ttk.Frame(container)
+        bf.grid(row=r, column=1, sticky=(tk.W, tk.E), pady=4)
+        bg_list = ["白色 (white)", "透明 (transparent)", "暗色 (#1e1e1e)"]
+        self.image_bg_combo = ttk.Combobox(bf, values=bg_list, state="readonly", width=30)
+        bg_idx = {"white": 0, "transparent": 1, "#1e1e1e": 2}
+        self.image_bg_combo.current(bg_idx.get(self.image_background.get(), 0))
+        self.image_bg_combo.grid(row=0, column=0, sticky=tk.W, padx=(0, 12))
+        # DPI 选择（背景颜色行右侧）
+        ttk.Label(bf, text="DPI:", font=("Microsoft YaHei UI", 9)).grid(
+            row=0, column=1, padx=(0, 4))
+        dpi_list = ["72", "96", "144", "192", "300"]
+        self.image_dpi_combo = ttk.Combobox(bf, values=dpi_list, state="readonly", width=8)
+        dpi_str = str(self.image_dpi.get())
+        self.image_dpi_combo.current(dpi_list.index(dpi_str) if dpi_str in dpi_list else 1)
+        self.image_dpi_combo.grid(row=0, column=2, sticky=tk.W)
+        r += 1
+
+        # 初始隐藏（默认显示 DOCX 选项）
+        container.grid_remove()
+
+        return row + 1
+
     # ── 交互回调 ────────────────────────────────────────────────────────────
 
     def on_format_change(self, event: tk.Event | None = None) -> None:
@@ -303,6 +403,7 @@ class ExportPage:
         output_format = self.get_selected_format()
         is_docx = output_format == "DOCX"
         is_pdf = output_format == "PDF"
+        is_image = output_format == "IMAGE"
 
         # 转换 Mermaid 行：DOCX 和 PDF 均可见
         show_mermaid = is_docx or is_pdf
@@ -313,10 +414,56 @@ class ExportPage:
         self.save_mermaid_label.grid() if is_docx else self.save_mermaid_label.grid_remove()
         self.save_mermaid_frame.grid() if is_docx else self.save_mermaid_frame.grid_remove()
 
+        # 图片格式选择（输出格式右侧内联）：仅 IMAGE 可见
+        if hasattr(self, "image_format_combo") and hasattr(self, "image_fmt_sep"):
+            self.image_format_combo.grid() if is_image else self.image_format_combo.grid_remove()
+            self.image_fmt_sep.grid() if is_image else self.image_fmt_sep.grid_remove()
+            if hasattr(self, "image_fmt_hint"):
+                self.image_fmt_hint.grid() if is_image else self.image_fmt_hint.grid_remove()
+
+        # 图片选项容器：仅 IMAGE 可见
+        if hasattr(self, "_image_frame"):
+            self._image_frame.grid() if is_image else self._image_frame.grid_remove()
+
         # DOCX 相关的选项重置
         if not is_docx:
             self.save_mermaid_images.set(False)
         # convert_mermaid_images 保持用户选择，不重置
+
+    # ── 图片设置回调 ──────────────────────────────────────────────────────
+
+    def _on_image_format_change(self, event: tk.Event | None = None) -> None:
+        """切换图片格式时更新格式提示。"""
+        fmt = self._get_image_format_code()
+        hints = {"png": "无损格式", "jpeg": "有损压缩", "webp": "有损/无损",
+                 "bmp": "无损（未压缩）", "tiff": "无损（可压缩）"}
+        self.image_fmt_hint.config(text=hints.get(fmt, ""))
+
+    def _on_image_page_change(self, event: tk.Event | None = None) -> None:
+        """图片张数变化时的回调。"""
+        pass
+
+    def _get_image_format_code(self) -> str:
+        """从 Combobox 选中项提取格式码（小写）。"""
+        selected = self.image_format_combo.get()
+        # "PNG" → "png", "JPEG" → "jpeg"
+        for fmt in ("png", "jpeg", "webp", "bmp", "tiff"):
+            if fmt in selected.lower():
+                return fmt
+        return "png"
+
+    def _get_image_bg_code(self) -> str:
+        """从 Combobox 选中项提取背景色值。"""
+        selected = self.image_bg_combo.get()
+        mapping = {
+            "白色": "white",
+            "透明": "transparent",
+            "暗色": "#1e1e1e",
+        }
+        for label, code in mapping.items():
+            if label in selected:
+                return code
+        return "white"
 
     def on_drop(self, event: Any) -> None:
         """处理拖拽放入的文件（由 Navigator.handle_drop 或 Treeview 本地事件调用）。
@@ -424,7 +571,10 @@ class ExportPage:
     def get_selected_format(self) -> str:
         selected = self.format_combo.get()
         for code, (desc, ext) in OUTPUT_FORMATS.items():
-            if f"{desc} ({ext})" == selected:
+            if code == "IMAGE":
+                if selected == desc:
+                    return code
+            elif f"{desc} ({ext})" == selected:
                 return code
         return "DOCX"
 
@@ -463,6 +613,12 @@ class ExportPage:
                 format_code=self.get_selected_format(),
                 save_mermaid_images=self.save_mermaid_images.get(),
                 convert_mermaid_images=self.convert_mermaid_images.get(),
+                # 图片专属选项
+                image_format=self._get_image_format_code(),
+                image_quality=100,
+                image_page_count=max(1, self.image_page_count.get()),
+                image_dpi=self.image_dpi.get(),
+                image_background=self._get_image_bg_code(),
             )
             converted = self._conversion.process_batch(
                 self.input_files, self.output_dir.get(), options)

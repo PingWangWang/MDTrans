@@ -26,6 +26,9 @@ LABEL_COL_WIDTH: int = 70
 # 固定容器高度使两 Tab 页上半部编辑区域高度一致，切换格式时不跳变
 DOCX_OPTIONS_HEIGHT: int = 95
 
+# 图片专属选项区域高度（张数/背景+DPI 共 2 行）
+IMAGE_OPTIONS_HEIGHT: int = 85
+
 # 日志 ScrolledText 默认行数
 DEFAULT_LOG_HEIGHT: int = 7
 

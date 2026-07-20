@@ -9,6 +9,12 @@
     "last_format": "DOCX",
     "convert_mermaid": true,
     "save_mermaid_images": false,
+    "image": {
+      "format": "png",
+      "page_count": 1,
+      "dpi": 96,
+      "background": "white"
+    },
     "convert_mermaid_images": true
   },
   "window": {
