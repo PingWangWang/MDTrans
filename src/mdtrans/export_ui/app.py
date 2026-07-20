@@ -265,7 +265,7 @@ class ExportPage:
                                                font=("Microsoft YaHei UI", 9))
         self.convert_mermaid_label.grid(row=r, column=0, sticky=tk.W, pady=4, padx=(0, 8))
         mf1 = ttk.Frame(container)
-        mf1.grid(row=r, column=1, sticky=tk.W, pady=4)
+        mf1.grid(row=r, column=1, sticky=(tk.W, tk.E), pady=4)
         ttk.Checkbutton(mf1, text="", variable=self.convert_mermaid_images).pack(
             side=tk.LEFT, padx=(0, 4))
         # 提示文本：灰色小字说明该功能依赖在线服务
@@ -273,10 +273,12 @@ class ExportPage:
                                             font=("Microsoft YaHei UI", 8),
                                             foreground="#888888")
         self.mermaid_hint_label.pack(side=tk.LEFT, padx=(0, 8))
+        # 弹性占位，将测试网络按钮推到右侧
+        ttk.Label(mf1, text="").pack(side=tk.LEFT, fill=tk.X, expand=True)
         # 网络检测按钮
         self.test_mermaid_btn = ttk.Button(
             mf1, text="测试网络", command=self._test_mermaid_connectivity,
-            style="info.TButton", width=8)
+            style="info.TButton", width=10)
         self.test_mermaid_btn.pack(side=tk.LEFT)
         self.convert_mermaid_frame = mf1
         r += 1
