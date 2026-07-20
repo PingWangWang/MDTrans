@@ -54,8 +54,9 @@ def main() -> None:
         "mdtrans.export_services.services.svc_md_to_docx",
         "mdtrans.export_services.services.svc_md_to_pdf",
         "mdtrans.export_services.services.svc_md_to_html",
-
+        "mdtrans.export_services.services.svc_md_to_image",
         "mdtrans.export_services.utils.file_utils",
+        "mdtrans.export_services.utils.image_utils",
         "mdtrans.export_services.utils.logger_utils",
         "mdtrans.export_services.utils.markdown_utils",
         "mdtrans.export_services.utils.mermaid_utils",
@@ -66,6 +67,9 @@ def main() -> None:
         "mdtrans.export_services.utils.text_utils",
         # 导入
         "mdtrans.import_ui.app",
+        # Playwright（系统浏览器截图）
+        "playwright",
+        "playwright.sync_api",
     ]
 
     # ── 构建命令行参数 ────────────────────────────────────────────────────
@@ -94,6 +98,8 @@ def main() -> None:
     # ── 收集 reportlab 条码模块（xhtml2pdf 运行时动态导入） ───────────────
     args.append("--collect-submodules=reportlab.graphics.barcode")
     args.append("--collect-submodules=reportlab.pdfbase")
+    # ── 收集 playwright 子模块（系统浏览器截图） ──────────────────────────
+    args.append("--collect-submodules=playwright._impl")
 
     # ── 排除无关重型包 ──────────────────────────────────────────────────
     # 这些包不在项目依赖中，但 PyInstaller 会因 hook 扫描而误扫，拖慢打包
@@ -112,6 +118,9 @@ def main() -> None:
         "gi",  # GObject Introspection (Linux only)
         "nvidia", "cupy",  # GPU 相关
         "PIL.SpiderImagePlugin",  # 非必要 PIL 插件
+        # Playwright 浏览器下载驱动（使用系统浏览器，不下载）
+        "playwright._impl._driver",
+        "playwright._impl._driver_server",
     ]
     for mod in exclude_modules:
         args.append(f"--exclude-module={mod}")

@@ -166,10 +166,16 @@ def _render_html_to_image(
         log_callback("  · 启动浏览器渲染引擎...")
 
     # ── 尝试按优先级连接系统已安装浏览器 ──────────────────────────────
-    # Edge (Win10/11 内置) → Chrome → 无头 Chromium（仅开发环境）
+    # 优先 Edge（Win10/11 内置）→ Chrome → 无头 Chromium（仅开发环境）
     _channels_to_try: list[tuple[str, str] | str] = [
         ("msedge", "Microsoft Edge"),
+        ("msedge-beta", "Microsoft Edge Beta"),
+        ("msedge-dev", "Microsoft Edge Dev"),
+        ("msedge-canary", "Microsoft Edge Canary"),
         ("chrome", "Google Chrome"),
+        ("chrome-beta", "Google Chrome Beta"),
+        ("chrome-dev", "Google Chrome Dev"),
+        ("chrome-canary", "Google Chrome Canary"),
     ]
     # 非打包环境（开发模式）额外尝试无头 Chromium（用户可能手动安装过）
     if not getattr(sys, "frozen", False):
@@ -182,7 +188,8 @@ def _render_html_to_image(
         try:
             with sync_playwright() as p:
                 launch_kwargs = {"headless": True}
-                if channel in ("msedge", "chrome"):
+                # 非回退选项（chromium）都传 channel 参数
+                if channel != "chromium":
                     launch_kwargs["channel"] = channel
                 browser = p.chromium.launch(**launch_kwargs)
                 context = browser.new_context(
