@@ -2,7 +2,7 @@
 name = "mdtrans"
 # 版本号单源真理：src/mdtrans/__about__.py
 # 更新版本后运行 python scripts/sync_version.py 同步至此
-version = "1.2.0"
+version = "1.2.1"
 description = "MDTrans — 双向文档转换工具：导入各类格式为 Markdown，导出 Markdown 为其他格式"
 authors = [
     { name = "MDTrans Contributors" },

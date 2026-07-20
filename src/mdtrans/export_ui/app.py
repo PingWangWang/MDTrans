@@ -31,7 +31,6 @@ from mdtrans.gui._gui_helpers import (
     create_action_buttons,
 )
 from mdtrans.gui._theme_manager import ThemeManager
-from mdtrans.gui._version import APP_VERSION
 
 DEFAULT_WINDOW_WIDTH: int = 750
 DEFAULT_LISTBOX_HEIGHT: int = 4
@@ -182,7 +181,6 @@ class ExportPage:
                 ("summary", "#CC6600"), ("service", "#666666"),
                 ("normal", self._tm.colors["log_fg"]),
             ])
-        self._create_footer(mf, row)
 
         # Treeview 本地拖拽注册（与根窗口全局监听互备）
         if self.has_dnd:
@@ -295,11 +293,6 @@ class ExportPage:
         r += 1
 
         return row + 1
-
-    def _create_footer(self, mf: ttk.Frame, row: int) -> None:
-        lf = ttk.Frame(mf)
-        lf.grid(row=row, column=0, columnspan=2, pady=(4, 2), sticky=(tk.W, tk.E))
-        ttk.Label(lf, text=f"v{APP_VERSION}", font=("Microsoft YaHei UI", 9)).pack(side=tk.RIGHT)
 
     # ── 交互回调 ────────────────────────────────────────────────────────────
 

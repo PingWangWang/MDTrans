@@ -16,7 +16,6 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, scrolledtext, ttk
 from typing import Any
 
-from mdtrans.gui._version import APP_VERSION
 from mdtrans.gui._dialogs import DialogTheme
 from mdtrans.gui._gui_helpers import (
     DEFAULT_LOG_HEIGHT,
@@ -225,11 +224,6 @@ class ImportPage:
                 ("info", "#0066CC"), ("arrow", "#666666"), ("complete", "#0066CC"),
                 ("normal", self._tm.colors["log_fg"]),
             ])
-
-        # 底部版本号
-        lf = ttk.Frame(mf)
-        lf.grid(row=row, column=0, columnspan=2, pady=(4, 2), sticky=(tk.W, tk.E))
-        ttk.Label(lf, text=f"v{APP_VERSION}", font=("Microsoft YaHei UI", 9)).pack(side=tk.RIGHT)
 
         # Treeview 本地拖拽注册（与根窗口全局监听互备）
         if self.has_dnd:
