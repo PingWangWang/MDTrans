@@ -4,53 +4,115 @@ Markdown to PDF conversion service
 Provides common functionality for converting Markdown to PDF format
 """
 
+import os
 import shutil
 import tempfile
 from pathlib import Path
 
 from ..utils import get_logger
-from ..utils.markdown_utils import convert_markdown_to_html, get_md_text
-from ..utils.text_utils import contains_chinese, contains_japanese
+from ..utils.markdown_utils import get_md_text
+from ..styles.css_adapter import generate_xhtml2pdf_stylesheet
 
 logger = get_logger(__name__)
 
+# ---------------------------------------------------------------------------
+# CJK 字体初始化（注册到 ReportLab + xhtml2pdf）
+# ---------------------------------------------------------------------------
 
-def convert_to_html_with_font_support(md_text: str) -> str:
+_FONT_INIT_DONE: bool = False
+
+
+def _ensure_cjk_font() -> None:
+    """注册系统中文字体到 ReportLab 并添加到 xhtml2pdf 字体映射表。
+
+    只需执行一次。在 ``C:\\Windows\\Fonts`` 中查找可用的中文字体，
+    将所有候选字体名都注册到 ``xhtml2pdf.default.DEFAULT_FONT``，
+    确保 CSS font-family 中的任何中文字体名都能被 xhtml2pdf 识别。
     """
-    Convert Markdown to HTML and add Chinese/Japanese font support
+    global _FONT_INIT_DONE
+    if _FONT_INIT_DONE:
+        return
+
+    from reportlab.pdfbase import pdfmetrics  # noqa: PLC0415
+    from reportlab.pdfbase.ttfonts import TTFont  # noqa: PLC0415
+    import xhtml2pdf.default  # noqa: PLC0415
+
+    font_dir = r"C:\Windows\Fonts"
+    candidates = [
+        ("SimSun", "simsun.ttc", True),
+        ("Microsoft YaHei", "msyh.ttc", True),
+        ("SimHei", "simhei.ttf", False),
+        ("FangSong", "simfang.ttf", False),
+    ]
+
+    for font_name, filename, is_ttc in candidates:
+        font_path = os.path.join(font_dir, filename)
+        if not os.path.exists(font_path):
+            continue
+        try:
+            kwargs = {"subfontIndex": 0} if is_ttc else {}
+            register_name = "SimSun"
+            pdfmetrics.registerFont(TTFont(register_name, font_path, **kwargs))
+            # 将所有候选字体名都注册到 xhtml2pdf 映射表
+            all_aliases = [
+                register_name,
+                register_name.lower(),
+                font_name,
+                font_name.lower(),
+            ]
+            for alias in all_aliases:
+                xhtml2pdf.default.DEFAULT_FONT[alias] = register_name
+            _FONT_INIT_DONE = True
+            logger.info(f"已注册中文字体: {register_name} -> {filename}")
+            return
+        except Exception as exc:
+            logger.warning(f"注册字体 {font_name} 失败: {exc}")
+            continue
+
+    logger.warning("未找到可用的中文字体，PDF 中的中文可能显示为方块")
+
+
+# ---------------------------------------------------------------------------
+# 转换逻辑
+# ---------------------------------------------------------------------------
+
+
+def convert_to_html_with_styles(md_text: str) -> str:
+    """
+    Convert Markdown to HTML (via Pandoc) and inject xhtml2pdf-compatible
+    CSS stylesheet that matches DOCX output styling.
+
+    Uses Pandoc for MD→HTML to keep HTML structure consistent with
+    the DOCX and HTML export services, ensuring CSS selectors match.
+
+    Also ensures CJK fonts are registered so xhtml2pdf can render
+    Chinese characters correctly.
 
     Args:
         md_text: Markdown text to convert
 
     Returns:
-        str: HTML string with appropriate font support
+        str: HTML string with full style support for PDF generation
     """
-    html_str = convert_markdown_to_html(md_text)
+    from pypandoc import convert_text  # noqa: PLC0415
 
-    if not contains_chinese(md_text) and not contains_japanese(md_text):
-        return html_str
+    _ensure_cjk_font()
+    html_str = convert_text(md_text, format="markdown", to="html")
+    full_css = generate_xhtml2pdf_stylesheet()
 
-    # Add Chinese/Japanese font CSS
-    font_families = ",".join(
-        [
-            "Sans-serif",
-            "STSong-Light",
-            "MSung-Light",
-            "HeiseiMin-W3",
-        ]
-    )
-    css_style = f"""
-    <style>
-        html {{
-            font-family: "{font_families}";
-        }}
-    </style>
-    """
-
-    result = f"""
-    {css_style}
-    {html_str}
-    """
+    result = f"""<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<style>
+{full_css}
+</style>
+</head>
+<body>
+{html_str}
+</body>
+</html>
+"""
     return result
 
 
@@ -61,7 +123,11 @@ def convert_md_to_pdf(
     convert_mermaid: bool = False,
 ) -> None:
     """
-    Convert Markdown text to PDF format
+    Convert Markdown text to PDF format.
+
+    .. note::
+        PDF 中文渲染依赖系统 CJK 字体。首次转换时会自动注册
+        ``simsun.ttc``（宋体）或 ``msyh.ttc``（微软雅黑）等字体。
 
     Args:
         md_text: Markdown text to convert
@@ -102,8 +168,8 @@ def convert_md_to_pdf(
                 )
                 processed_md = modified_md
 
-        # Convert to HTML with font support
-        html_str = convert_to_html_with_font_support(processed_md)
+        # Convert to HTML with full styles
+        html_str = convert_to_html_with_styles(processed_md)
 
         logger.info(f"Converting Markdown to PDF: {output_path}")
 

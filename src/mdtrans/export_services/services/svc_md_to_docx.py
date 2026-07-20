@@ -1,4 +1,3 @@
-﻿#!/usr/bin/env python3
 """
 Markdown -> DOCX 转换服务
 
@@ -14,11 +13,10 @@ Markdown -> DOCX 转换服务
 设计说明
 --------
 - 入口函数：`convert_md_to_docx()`
-- 样式处理主流程：`_apply_formatting()` -> `_step1_*` / `_step2_*` / `_step3_*`
-- 本模块避免直接暴露 docx XML 细节给上层调用者，相关复杂逻辑均封装在私有函数中。
+- 样式定义统一在 ``styles.definitions`` 中维护
+- 样式操作委托给 ``styles.docx_adapter``
 """
 
-import re
 import traceback
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -32,312 +30,37 @@ from ..utils import get_logger
 from ..utils.markdown_utils import get_md_text
 from ..utils.mermaid_utils import replace_mermaid_with_images, cleanup_temp_images, extract_mermaid_blocks
 from ..utils.pandoc_utils import pandoc_convert_file
+from ..styles.definitions import (
+    StyleDefinition,
+    STYLE_BY_NAME,
+    ALL_STYLES,
+    NORMAL,
+    TABLE_TEXT as TABLE_CONFIG,
+    IMAGE_PARAGRAPH as IMAGE_CONFIG,
+    CUSTOM_LIST as CUSTOM_LIST_CONFIG,
+    CODE_BLOCK as CODE_CONFIG,
+    TOC_1 as TOC1_CONFIG,
+    TOC_2 as TOC2_CONFIG,
+    TOC_3 as TOC3_CONFIG,
+)
+from ..styles.docx_adapter import (
+    REQUIRED_PARAGRAPH_STYLES,
+    REQUIRED_CHARACTER_STYLES,
+    get_style_config,
+    apply_para_formatting,
+    create_or_update_style,
+    set_run_fonts,
+    _has_num_pr,
+    _has_image,
+    _is_code_block,
+    _is_toc_paragraph,
+    _contains_emoji,
+)
 
 logger = get_logger(__name__)
 
-# ---------------------------------------------------------------------------
-# 样式配置表
-# - 每个字典对应一个“段落样式”定义
-# - `style_keywords` 用于从 Pandoc 生成的样式名映射到本地配置
-# - 带 `is_*` 标记的样式用于特殊分支（表格、图片、列表、代码块）
-# ---------------------------------------------------------------------------
-STYLE_CONFIGS: list[dict] = [
-    {
-        "name": "Heading 1",
-        "style_keywords": ["Heading 1"],
-        "font_name": "宋体",
-        "font_name_latin": "Times New Roman",
-        "font_size": Pt(20),
-        "bold": True,
-        "color": RGBColor(0, 0, 0),
-        "first_line_indent": Pt(0),
-        "left_indent": Pt(0),
-        "line_spacing": 1.3,
-        "space_before": Pt(3),
-        "space_after": Pt(3),
-    },
-    {
-        "name": "Heading 2",
-        "style_keywords": ["Heading 2"],
-        "font_name": "宋体",
-        "font_name_latin": "Times New Roman",
-        "font_size": Pt(18),
-        "bold": True,
-        "color": RGBColor(0, 0, 0),
-        "first_line_indent": Pt(0),
-        "left_indent": Pt(0),
-        "line_spacing": 1.3,
-        "space_before": Pt(3),
-        "space_after": Pt(3),
-    },
-    {
-        "name": "Heading 3",
-        "style_keywords": ["Heading 3"],
-        "font_name": "宋体",
-        "font_name_latin": "Times New Roman",
-        "font_size": Pt(16),
-        "bold": True,
-        "color": RGBColor(0, 0, 0),
-        "first_line_indent": Pt(0),
-        "left_indent": Pt(0),
-        "line_spacing": 1.3,
-        "space_before": Pt(3),
-        "space_after": Pt(3),
-    },
-    {
-        "name": "Heading 4",
-        "style_keywords": ["Heading 4"],
-        "font_name": "宋体",
-        "font_name_latin": "Times New Roman",
-        "font_size": Pt(14),
-        "bold": True,
-        "color": RGBColor(0, 0, 0),
-        "first_line_indent": Pt(0),
-        "left_indent": Pt(0),
-        "line_spacing": 1.3,
-        "space_before": Pt(3),
-        "space_after": Pt(3),
-    },
-    {
-        "name": "Heading 5",
-        "style_keywords": ["Heading 5"],
-        "font_name": "宋体",
-        "font_name_latin": "Times New Roman",
-        "font_size": Pt(12),
-        "bold": True,
-        "color": RGBColor(0, 0, 0),
-        "first_line_indent": Pt(0),
-        "left_indent": Pt(0),
-        "line_spacing": 1.3,
-        "space_before": Pt(3),
-        "space_after": Pt(3),
-    },
-    {
-        "name": "Heading 6",
-        "style_keywords": ["Heading 6"],
-        "font_name": "宋体",
-        "font_name_latin": "Times New Roman",
-        "font_size": Pt(12),
-        "bold": True,
-        "color": RGBColor(0, 0, 0),
-        "first_line_indent": Pt(0),
-        "left_indent": Pt(0),
-        "line_spacing": 1.3,
-        "space_before": Pt(3),
-        "space_after": Pt(3),
-    },
-    {
-        "name": "Normal",
-        "style_keywords": ["Normal"],
-        "font_name": "宋体",
-        "font_name_latin": "Times New Roman",
-        "font_size": Pt(12),
-        "bold": False,
-        "color": RGBColor(0, 0, 0),
-        "first_line_indent": Pt(24),
-        "left_indent": Pt(0),
-        "line_spacing": 1.3,
-        "space_before": Pt(0),
-        "space_after": Pt(0),
-    },
-    {
-        "name": "List Paragraph",
-        "style_keywords": ["List Paragraph", "List"],
-        "font_name": "宋体",
-        "font_name_latin": "Times New Roman",
-        "font_size": Pt(12),
-        "bold": False,
-        "color": RGBColor(0, 0, 0),
-        "first_line_indent": Pt(0),
-        "left_indent": Pt(0),
-        "line_spacing": 1.3,
-        "space_before": Pt(0),
-        "space_after": Pt(0),
-        "is_list": True,
-    },
-    {
-        "name": "Custom List",
-        "style_keywords": [],
-        "font_name": "宋体",
-        "font_name_latin": "Times New Roman",
-        "font_size": Pt(12),
-        "bold": False,
-        "color": RGBColor(0, 0, 0),
-        "first_line_indent": Pt(24),
-        "left_indent": Pt(0),
-        "line_spacing": 1.3,
-        "space_before": Pt(0),
-        "space_after": Pt(0),
-        "is_custom_list": True,
-    },
-    {
-        "name": "Table Text",
-        "style_keywords": [],
-        "font_name": "宋体",
-        "font_name_latin": "Times New Roman",
-        "font_size": Pt(12),
-        "bold": False,
-        "color": RGBColor(0, 0, 0),
-        "first_line_indent": Pt(0),
-        "left_indent": Pt(0),
-        "line_spacing": 1.0,
-        "space_before": Pt(0),
-        "space_after": Pt(0),
-        "alignment": 1,
-        "is_table": True,
-    },
-    {
-        "name": "Image Paragraph",
-        "style_keywords": [],
-        "font_name": "宋体",
-        "font_name_latin": "Times New Roman",
-        "font_size": Pt(12),
-        "bold": False,
-        "color": RGBColor(0, 0, 0),
-        "first_line_indent": Pt(0),
-        "left_indent": Pt(0),
-        "line_spacing": 1.3,
-        "space_before": Pt(0),
-        "space_after": Pt(0),
-        "alignment": 1,
-        "is_image": True,
-    },
-    {
-        "name": "Code Block",
-        "style_keywords": [],
-        "font_name": "宋体",
-        "font_name_latin": "Times New Roman",
-        "font_size": Pt(10.5),  # 五号字
-        "bold": False,
-        "italic": True,  # 斜体
-        "color": RGBColor(255, 255, 255),  # 更明显的白色
-        "first_line_indent": Pt(0),
-        "left_indent": Pt(24),  # 左缩进2字符（所有行都缩进）
-        "line_spacing": 1.0,
-        "space_before": Pt(0),
-        "space_after": Pt(0),
-        "background_color": RGBColor(0, 0, 0),  # 黑色背景
-        "is_code": True,
-    },
-    {
-        "name": "Table of Contents 1",
-        "style_keywords": ["Table of Contents 1", "TOC 1"],
-        "font_name": "宋体",
-        "font_name_latin": "Times New Roman",
-        "font_size": Pt(12),  # 小四号
-        "bold": False,
-        "color": RGBColor(0, 0, 0),
-        "first_line_indent": Pt(0),  # 无缩进
-        "left_indent": Pt(0),
-        "line_spacing": 1.0,  # 单倍行距
-        "space_before": Pt(0),
-        "space_after": Pt(0),
-        "is_toc": True,
-    },
-    {
-        "name": "Table of Contents 2",
-        "style_keywords": ["Table of Contents 2", "TOC 2"],
-        "font_name": "宋体",
-        "font_name_latin": "Times New Roman",
-        "font_size": Pt(12),  # 小四号
-        "bold": False,
-        "color": RGBColor(0, 0, 0),
-        "first_line_indent": Pt(0),  # 无缩进
-        "left_indent": Pt(0),
-        "line_spacing": 1.0,  # 单倍行距
-        "space_before": Pt(0),
-        "space_after": Pt(0),
-        "is_toc": True,
-    },
-    {
-        "name": "Table of Contents 3",
-        "style_keywords": ["Table of Contents 3", "TOC 3"],
-        "font_name": "宋体",
-        "font_name_latin": "Times New Roman",
-        "font_size": Pt(12),  # 小四号
-        "bold": False,
-        "color": RGBColor(0, 0, 0),
-        "first_line_indent": Pt(0),  # 无缩进
-        "left_indent": Pt(0),
-        "line_spacing": 1.0,  # 单倍行距
-        "space_before": Pt(0),
-        "space_after": Pt(0),
-        "is_toc": True,
-    },
-]
 
-REQUIRED_PARAGRAPH_STYLES: set[str] = {
-    "Normal",
-    "Heading 1",
-    "Heading 2",
-    "Heading 3",
-    "Heading 4",
-    "Heading 5",
-    "Heading 6",
-    "Table Text",
-    "List Paragraph",
-    "Image Paragraph",
-    "Custom List",
-    "Code Block",
-    "Source Code",  # Pandoc generated code block style
-    "Preformatted Text",  # Pandoc generated code block style
-    "Table of Contents 1",
-    "Table of Contents 2",
-    "Table of Contents 3",
-}
 
-REQUIRED_CHARACTER_STYLES: set[str] = {
-    "Default Paragraph Font",
-    "Hyperlink",
-    "Strong",
-    "Emphasis",
-}
-
-# 常用样式配置快捷引用，避免运行时重复查找
-_NORMAL_CONFIG: dict = next(c for c in STYLE_CONFIGS if c["name"] == "Normal")
-_TABLE_CONFIG: dict = next(c for c in STYLE_CONFIGS if c.get("is_table"))
-_IMAGE_CONFIG: dict = next(c for c in STYLE_CONFIGS if c.get("is_image"))
-_CUSTOM_LIST_CONFIG: dict = next(c for c in STYLE_CONFIGS if c.get("is_custom_list"))
-_CODE_CONFIG: dict = next(c for c in STYLE_CONFIGS if c.get("is_code"))
-_TOC1_CONFIG: dict = next(c for c in STYLE_CONFIGS if c["name"] == "Table of Contents 1")
-_TOC2_CONFIG: dict = next(c for c in STYLE_CONFIGS if c["name"] == "Table of Contents 2")
-_TOC3_CONFIG: dict = next(c for c in STYLE_CONFIGS if c["name"] == "Table of Contents 3")
-
-# Pandoc/语法高亮可能产生的代码样式关键字
-CODE_STYLE_KEYWORDS: tuple[str, ...] = (
-    "Preformatted",
-    "Code",
-    "Source Code",
-    "NormalTok",
-    "Verbatim",
-    "KeywordTok",
-    "StringTok",
-    "CommentTok",
-    "FunctionTok",
-    "VariableTok",
-    "DataTypeTok",
-    "DecValTok",
-    "BaseNTok",
-    "FloatTok",
-    "ConstantTok",
-    "CharTok",
-    "SpecialCharTok",
-    "ImportTok",
-    "DocumentationTok",
-    "AnnotationTok",
-    "OtherTok",
-    "ControlFlowTok",
-    "OperatorTok",
-    "BuiltInTok",
-    "ExtensionTok",
-    "PreprocessorTok",
-    "AttributeTok",
-    "RegionMarkerTok",
-    "InformationTok",
-    "WarningTok",
-    "AlertTok",
-    "ErrorTok",
-)
 
 # 常量区：图像尺寸换算与页面默认值
 # 1pt = 12700 EMU（Office Open XML 单位）
@@ -353,153 +76,6 @@ IMAGE_TOP_BOTTOM_MARGIN_PT = 72
 # ---------------------------------------------------------------------------
 
 
-def _get_config_for_style(style_name: str) -> dict:
-    """根据段落样式名获取配置。
-
-    说明：
-    - 按 `STYLE_CONFIGS` 顺序匹配 `style_keywords`。
-    - 表格样式由专门分支处理，这里跳过 `is_table`。
-    - 未命中时回退到 `_NORMAL_CONFIG`。
-    """
-    for config in STYLE_CONFIGS:
-        if config.get("is_table"):
-            continue
-        for keyword in config["style_keywords"]:
-            if keyword in style_name:
-                return config
-    return _NORMAL_CONFIG
-
-
-def _is_emoji(char: str) -> bool:
-    """判断字符是否为 emoji。
-    
-    检测范围包括：
-    - Emoji 基本区（U+1F600-U+1F64F）
-    - Emoji 补充区（U+1F900-U+1F9FF）
-    - Emoji 符号和标点（U+2600-U+26FF, U+2700-U+27BF）
-    - Emoji 组件（U+200D 零宽连接符等）
-    """
-    code = ord(char)
-    return (
-        0x1F600 <= code <= 0x1F64F or  # Emoticons
-        0x1F900 <= code <= 0x1F9FF or  # Supplemental Symbols and Pictographs
-        0x1F300 <= code <= 0x1F5FF or  # Miscellaneous Symbols and Pictographs
-        0x1F680 <= code <= 0x1F6FF or  # Transport and Map Symbols
-        0x2600 <= code <= 0x26FF or    # Miscellaneous Symbols
-        0x2700 <= code <= 0x27BF or    # Dingbats
-        0xFE00 <= code <= 0xFE0F or    # Variation Selectors
-        0x1FA00 <= code <= 0x1FA6F or  # Chess Symbols
-        0x1FA70 <= code <= 0x1FAFF or  # Symbols and Pictographs Extended-A
-        code == 0x200D or              # Zero Width Joiner
-        code == 0x20E3 or              # Combining Enclosing Keycap
-        0x1F1E0 <= code <= 0x1F1FF     # Regional Indicator Symbols (flags)
-    )
-
-
-def _contains_emoji(text: str) -> bool:
-    """判断文本中是否包含 emoji 字符。"""
-    return any(_is_emoji(char) for char in text)
-
-
-def _set_rfonts(rpr_elem, font_name: str, font_name_latin: str | None = None, force_emoji_font: bool = False) -> None:
-    """设置 run 的中西文字体，并移除主题字体覆盖。
-
-    Word 中字体可能由主题（theme）覆盖显式配置；为保证导出一致性，
-    这里主动移除 `asciiTheme/hAnsiTheme/themeEastAsia/cstheme`。
-    
-    Args:
-        rpr_elem: run 的 rPr 元素
-        font_name: 中文字体名称
-        font_name_latin: 西文字体名称（可选）
-        force_emoji_font: 是否强制使用 emoji 字体（当检测到 emoji 时）
-    """
-    rFonts = rpr_elem.get_or_add_rFonts()
-    
-    if force_emoji_font:
-        # 使用 Windows 系统 emoji 字体
-        emoji_font = "Segoe UI Emoji"
-        rFonts.set(qn("w:ascii"), emoji_font)
-        rFonts.set(qn("w:hAnsi"), emoji_font)
-        rFonts.set(qn("w:eastAsia"), emoji_font)
-        rFonts.set(qn("w:cs"), emoji_font)
-    else:
-        # Set Latin fonts (ascii and hAnsi)
-        latin_font = font_name_latin if font_name_latin else font_name
-        rFonts.set(qn("w:ascii"), latin_font)
-        rFonts.set(qn("w:hAnsi"), latin_font)
-        # Set East Asian fonts
-        rFonts.set(qn("w:eastAsia"), font_name)
-        rFonts.set(qn("w:cs"), font_name)
-    
-    for attr in ("w:asciiTheme", "w:hAnsiTheme", "w:themeEastAsia", "w:cstheme"):
-        rFonts.attrib.pop(qn(attr), None)
-
-
-# Matches paragraphs that start with a number/letter list marker and should not be indented
-_NO_INDENT_PATTERN = re.compile(r"^\s*(\d+[.、）)）]|[（(]\d+[）)]|[一二三四五六七八九十百]+[、.]|[a-zA-Z][.)])")
-
-
-def _needs_no_indent(paragraph) -> bool:
-    """判断段落是否应取消首行缩进。
-
-    当前策略：仅当段落文本以编号/字母序号开头时取消缩进，
-    其他普通段落仍保留 `Normal` 的首行缩进规则。
-    """
-    return bool(_NO_INDENT_PATTERN.match(paragraph.text))
-
-
-def _has_num_pr(paragraph) -> bool:
-    """判断段落是否包含 `w:numPr`（通常表示列表项）。"""
-    pPr = paragraph._p.find(qn("w:pPr"))
-    return pPr is not None and pPr.find(qn("w:numPr")) is not None
-
-
-def _has_image(paragraph) -> bool:
-    """判断段落中是否包含图片节点。"""
-    # 通过 drawing/pic 节点快速判断（兼容内联/浮动图）
-    for child in paragraph._element.iter():
-        if child.tag.endswith("drawing") or child.tag.endswith("pic"):
-            return True
-    return False
-
-
-def _is_toc_paragraph(paragraph) -> tuple[bool, int]:
-    """判断段落是否为目录项，并返回目录级别（1/2/3）。
-    
-    返回：
-        (是否为目录, 目录级别)
-        如果不是目录，返回 (False, 0)
-    """
-    style_name = paragraph.style.name if paragraph.style else ""
-    for level in [1, 2, 3]:
-        toc_style_name = f"Table of Contents {level}"
-        toc_short_name = f"TOC {level}"
-        if toc_style_name in style_name or toc_short_name in style_name:
-            return True, level
-    return False, 0
-
-
-def _is_code_block(paragraph) -> bool:
-    """判断段落是否为代码块。
-
-    判定顺序：
-    1) 样式名是否包含代码关键词（Pandoc 常见输出）；
-    2) run 字体是否为等宽字体（Consolas/Courier/Monospace）。
-    """
-    style_name = paragraph.style.name if paragraph.style else ""
-    for keyword in CODE_STYLE_KEYWORDS:
-        if keyword in style_name:
-            logger.debug(f"Detected code block by style name: {style_name}")
-            return True
-    
-    # 兜底：检测等宽字体
-    for run in paragraph.runs:
-        font_name = run.font.name
-        if font_name and ("Consolas" in font_name or "Courier" in font_name or "Monospace" in font_name):
-            logger.debug(f"Detected code block by font: {font_name}")
-            return True
-    
-    return False
 
 
 def _get_image_limits(doc) -> tuple[float, float]:
@@ -672,81 +248,11 @@ def _format_table_content(doc) -> None:
                 for para in cell.paragraphs:
                     try:
                         para.style = table_text_style
-                        _apply_para_formatting(para, _TABLE_CONFIG, is_table=True)
+                        apply_para_formatting(para, TABLE_CONFIG, is_table=True)
                     except Exception as exc:
                         logger.warning(f"Failed to format table cell: {exc}")
 
 
-def _apply_para_formatting(paragraph, config: dict, is_table: bool = False) -> None:
-    """按配置应用段落与 run 级格式。
-
-    参数：
-    - `paragraph`: 待处理段落
-    - `config`: 来自 `STYLE_CONFIGS` 的样式配置
-    - `is_table`: 是否处于表格上下文（用于对齐与缩进策略）
-    """
-    pf = paragraph.paragraph_format
-    pf.line_spacing = config["line_spacing"]
-    pf.space_before = config["space_before"]
-    pf.space_after = config["space_after"]
-    
-    # 代码块：尽量保持段内连续，避免分页断开阅读
-    if config.get("is_code"):
-        pf.keep_together = True
-        pf.keep_with_next = True
-    
-    # 自定义列表：显式覆盖 Pandoc 生成的缩进
-    if config.get("is_custom_list"):
-        pf.left_indent = config["left_indent"]
-        pf.first_line_indent = config["first_line_indent"]
-    # 列表项：编号系统负责部分缩进，这里仅控制左缩进基线
-    elif config.get("is_list"):
-        # 首行缩进固定为 0，避免与编号悬挂缩进冲突
-        pf.left_indent = config["left_indent"]
-        pf.first_line_indent = Pt(0)
-    elif not _has_num_pr(paragraph):
-        if config["first_line_indent"] and not is_table and _needs_no_indent(paragraph):
-            pf.first_line_indent = Pt(0)
-        else:
-            pf.first_line_indent = config["first_line_indent"]
-            pf.left_indent = config["left_indent"]
-    if is_table and "alignment" in config:
-        pf.alignment = config["alignment"]
-    # 图片段落：保险起见再次设置为居中
-    if config.get("is_image"):
-        pf.alignment = 1  # Center alignment
-
-    for run in paragraph.runs:
-        run.font.color.rgb = config["color"]
-        run.font.name = config.get("font_name_latin", config["font_name"])
-        run.font.size = config["font_size"]
-        # 保留 Pandoc 显式粗体（如 Markdown 的 **text**）
-        if config["bold"]:
-            run.font.bold = True
-        elif run.font.bold is not True:
-            run.font.bold = config["bold"]
-        
-        # 配置要求斜体时强制设置
-        if config.get("italic"):
-            run.font.italic = True
-        
-        # 检测 run 文本是否包含 emoji
-        has_emoji = _contains_emoji(run.text)
-        
-        # 代码块统一使用西文字体（避免等宽字体被中文字体覆盖）
-        if config.get("is_code"):
-            _set_rfonts(
-                run._element.get_or_add_rPr(),
-                config.get("font_name_latin", config["font_name"]),
-                force_emoji_font=has_emoji,
-            )
-        else:
-            _set_rfonts(
-                run._element.get_or_add_rPr(),
-                config["font_name"],
-                config.get("font_name_latin"),
-                force_emoji_font=has_emoji,
-            )
 
 
 # ---------------------------------------------------------------------------
@@ -818,49 +324,12 @@ def _step1_delete_styles(doc) -> None:
 
 def _step2_create_styles(doc) -> None:
     """步骤 2：创建/刷新本模块定义的标准样式。"""
-    for config in STYLE_CONFIGS:
-        name = config["name"]
+    for style_def in ALL_STYLES:
         try:
-            existing_names = {s.name for s in doc.styles}
-            style = doc.styles[name] if name in existing_names else doc.styles.add_style(name, 1)
-
-            style.font.name = config.get("font_name_latin", config["font_name"])
-            style.font.size = config["font_size"]
-            style.font.bold = config["bold"]
-            style.font.color.rgb = config["color"]
-
-            # 使用 style.element.get_or_add_rPr() 获取 CT_RPr 更稳定；
-            # style.font._element 在部分场景会返回 CT_Style。
-            rPr = style.element.get_or_add_rPr()
-            _set_rfonts(rPr, config["font_name"], config.get("font_name_latin"))
-
-            # 移除主题色覆盖，确保颜色按显式配置生效
-            color_elem = rPr.find(qn("w:color"))
-            if color_elem is not None:
-                for attr in ("w:themeColor", "w:themeShade", "w:themeTint"):
-                    color_elem.attrib.pop(qn(attr), None)
-
-            pf = style.paragraph_format
-            pf.line_spacing = config["line_spacing"]
-            pf.first_line_indent = config["first_line_indent"]
-            if config["left_indent"] is not None:
-                pf.left_indent = config["left_indent"]
-            pf.space_before = config["space_before"]
-            pf.space_after = config["space_after"]
-            
-            # 代码块背景色（段落底纹）
-            if config.get("background_color"):
-                pPr = style.element.get_or_add_pPr()
-                shd = pPr.find(qn("w:shd"))
-                if shd is None:
-                    shd_xml = '<w:shd {} w:val="clear"/>'.format(nsdecls("w"))
-                    shd = parse_xml(shd_xml)
-                    pPr.append(shd)
-                bg_color = config["background_color"]
-                hex_color = f"{bg_color[0]:02X}{bg_color[1]:02X}{bg_color[2]:02X}"
-                shd.set(qn("w:fill"), hex_color)
+            create_or_update_style(doc, style_def)
+            logger.debug(f"Created/updated style: {style_def.name}")
         except Exception as exc:
-            logger.warning(f"Failed to create/update style '{name}': {exc}")
+            logger.warning(f"Failed to create/update style '{style_def.name}': {exc}")
 
 
 def _step3_apply_to_content(doc) -> None:
@@ -880,28 +349,29 @@ def _step3_apply_to_content(doc) -> None:
         try:
             if _is_code_block(para):
                 para.style = code_block_style
-                _apply_para_formatting(para, _CODE_CONFIG)
+                apply_para_formatting(para, CODE_CONFIG)
                 code_block_count += 1
                 logger.debug(f"Applied Code Block style to paragraph: {para.text[:50]}")
             elif _has_image(para):
                 para.style = image_para_style
-                _apply_para_formatting(para, _IMAGE_CONFIG)
+                apply_para_formatting(para, IMAGE_CONFIG)
                 _scale_images_in_paragraph(para, max_image_width, max_image_height)
             elif _has_num_pr(para):
                 para.style = custom_list_style
-                _apply_para_formatting(para, _CUSTOM_LIST_CONFIG)
+                apply_para_formatting(para, CUSTOM_LIST_CONFIG)
             else:
                 # 检查是否为目录项
                 is_toc, toc_level = _is_toc_paragraph(para)
                 if is_toc:
                     toc_style_map = {1: toc1_style, 2: toc2_style, 3: toc3_style}
-                    toc_config_map = {1: _TOC1_CONFIG, 2: _TOC2_CONFIG, 3: _TOC3_CONFIG}
+                    toc_config_map = {1: TOC1_CONFIG, 2: TOC2_CONFIG, 3: TOC3_CONFIG}
                     para.style = toc_style_map[toc_level]
-                    _apply_para_formatting(para, toc_config_map[toc_level])
+                    apply_para_formatting(para, toc_config_map[toc_level])
                     toc_count[toc_level] += 1
                 else:
                     style_name = para.style.name if para.style else "Normal"
-                    _apply_para_formatting(para, _get_config_for_style(style_name))
+                    style_def = get_style_config(style_name)
+                    apply_para_formatting(para, style_def)
         except Exception as exc:
             logger.warning(f"Failed to format paragraph: {exc}")
 
@@ -957,7 +427,7 @@ def _apply_formatting(docx_path: Path) -> None:
     """
         对输出 DOCX 应用三步格式化管线：
         1) 删除非白名单样式；
-        2) 依据 `STYLE_CONFIGS` 刷新标准样式；
+        2) 依据 `ALL_STYLES` 刷新标准样式；
         3) 遍历正文/表格并应用段落与 run 级格式。
     """
     doc = Document(docx_path)
