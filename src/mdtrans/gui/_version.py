@@ -27,7 +27,7 @@ def _read_version() -> str:
         pass
 
     # 3. 回退
-    return "1.2.9"
+    return "1.2.10"
 
 
 APP_VERSION: str = _read_version()
