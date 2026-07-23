@@ -102,22 +102,53 @@ def open_url(url: str) -> None:
 def parse_dnd_paths(raw_data: str) -> list[str]:
     """解析 tkinterdnd2 拖拽事件中的文件路径列表。
 
+    兼容 tkinterdnd2 在 Windows 上的多种 raw_data 格式：
+    - 换行分隔：``C:\\f1.docx\\r\\nC:\\f2.docx``
+    - Tcl 列表（有花括号）：``{C:\\f1.docx} {C:\\f2.docx}``
+    - 纯空格分隔（无花括号）：``C:\\f1.docx C:\\f2.docx``
+
     Args:
         raw_data: tkinterdnd2 事件中的 ``data`` 字符串。
 
     Returns:
-        文件路径列表。
+        文件路径列表。路径中的首尾花括号已被移除。
     """
     if not raw_data:
         return []
-    # tkinterdnd2 在不同平台/版本下的格式不同
-    # Windows: 路径用 \r\n 分隔，可能含 { }
-    paths: list[str] = []
-    for part in re.split(r"[\r\n]+", raw_data.strip()):
-        part = part.strip().strip("{}").strip()
-        if part and not part.startswith("#"):
-            paths.append(part)
-    return paths
+    raw = raw_data.strip()
+
+    # ── 方式 1：换行符分隔（Windows 上最常见） ─────────────────────────
+    if "\n" in raw or "\r" in raw:
+        paths: list[str] = []
+        for part in re.split(r"[\r\n]+", raw):
+            part = part.strip()
+            # 智能去花括号：只去掉首尾各一个（不误伤路径内的 {}）
+            if part.startswith("{") and part.endswith("}"):
+                part = part[1:-1]
+            if part and not part.startswith("#"):
+                paths.append(part)
+        if len(paths) >= 1:
+            return paths
+
+    # ── 方式 2：Tcl 列表格式 — {...} 空格分隔 ──────────────────────────
+    braced = re.findall(r"\{([^{}]+)\}", raw)
+    if braced:
+        paths = [b.strip() for b in braced if b.strip() and not b.strip().startswith("#")]
+        if paths:
+            return paths
+
+    # ── 方式 3：纯空格分隔（无花括号，路径中不含空格） ───────────────
+    parts = raw.split()
+    if len(parts) > 1:
+        return [p for p in parts if not p.startswith("#")]
+
+    # ── 方式 4：单条路径，清理花括号 ──────────────────────────────────
+    p = raw
+    if p.startswith("{") and p.endswith("}"):
+        p = p[1:-1]
+    if p and not p.startswith("#"):
+        return [p]
+    return []
 
 
 # ── 日志标签识别 ──────────────────────────────────────────────────────────

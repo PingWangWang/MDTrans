@@ -226,25 +226,22 @@ class ImportPage:
                 ("normal", self._tm.colors["log_fg"]),
             ])
 
-        # Treeview 本地拖拽注册（与根窗口全局监听互备）
-        if self.has_dnd:
-            self._register_drop_target()
+
 
     # ── 拖拽 ──────────────────────────────────────────────────────────────
 
     def on_drop(self, event: Any) -> None:
-        """处理拖拽放入的文件（由 Navigator.handle_drop 或 Treeview 本地事件调用）。
+        """处理拖拽放入的文件（由 Navigator.handle_drop 调用）。
 
         自动筛选：仅接受 _FILE_TYPE_MAP 中定义的受支持格式。
-        兼容 tkinterdnd2 的两种常见数据格式：\n 分隔 和 Tcl 列表格式。
+        路径解析由 parse_dnd_paths 统一处理，兼容多种 raw_data 格式。
         """
         raw_data = getattr(event, "data", "")
         if not raw_data:
             return
-        # 优先用 newline 分隔格式解析（Windows 最常见）
         paths = parse_dnd_paths(raw_data)
-        # 若结果不佳（0-1 条）且数据含多文件特征 → 尝试 Tcl splitlist
-        if len(paths) <= 1 and ("{" in raw_data or raw_data.count(" ") > len(paths)):
+        # 安全网：若 parse_dnd_paths 未解析出多文件，再用 Tcl splitlist 兜底
+        if len(paths) <= 1 and ("{" in raw_data or " " in raw_data):
             try:
                 sp = self.root.splitlist(raw_data)
                 if len(sp) > len(paths):
@@ -270,20 +267,6 @@ class ImportPage:
                 self.log_message(f"已拖入 {accepted} 个文件")
             else:
                 self.log_message(f"已拖入 {accepted}/{total} 个文件（已自动筛除不支持的文件格式）")
-
-    def _register_drop_target(self) -> None:
-        """注册 Treeview 为拖拽目标（与根窗口全局监听互备）。"""
-        """注册 Treeview 为拖拽目标（与根窗口全局监听互备）。"""
-        try:
-            from tkinterdnd2 import DND_FILES
-            self.file_treeview.drop_target_register(DND_FILES)
-            self.file_treeview.dnd_bind("<<Drop>>", self._on_drop_local)
-        except Exception:
-            pass
-
-    def _on_drop_local(self, event: Any) -> None:
-        """处理 Treeview 本地拖拽事件。"""
-        self.on_drop(event)
 
     # ── 文件操作 ────────────────────────────────────────────────────────────
 

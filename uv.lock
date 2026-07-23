@@ -768,7 +768,7 @@ wheels = [
 
 [[package]]
 name = "mdtrans"
-version = "1.2.10"
+version = "1.2.11"
 source = { editable = "." }
 dependencies = [
     { name = "beautifulsoup4" },
