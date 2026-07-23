@@ -22,7 +22,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from docx import Document
-from docx.oxml import parse_xml
+from docx.oxml import parse_xml, OxmlElement
 from docx.oxml.ns import nsdecls, qn
 from docx.shared import Pt, RGBColor
 
@@ -182,9 +182,10 @@ def _scale_images_in_paragraph(paragraph, max_width_pt: float, max_height_pt: fl
 
 
 def _apply_table_layout(tbl) -> None:
-    """为表格统一设置宽度与边框样式。
+    """为表格统一设置宽度、布局模式与边框样式。
 
     - 宽度：100% 页面宽（`w:type=pct, w=5000`）
+    - 布局：autofit，列宽根据内容自动调整
     - 边框：外边框与内部网格均为 single
     """
     tblPr = tbl._element.tblPr
@@ -198,6 +199,14 @@ def _apply_table_layout(tbl) -> None:
 
     tblW = parse_xml(f'<w:tblW {nsdecls("w")} w:type="pct" w:w="5000"/>')
     tblPr.append(tblW)
+
+    # 设置表格布局为 autofit，使列宽根据内容自动调整
+    existing_tblLayout = tblPr.find(qn("w:tblLayout"))
+    if existing_tblLayout is not None:
+        tblPr.remove(existing_tblLayout)
+
+    tblLayout = parse_xml(f'<w:tblLayout {nsdecls("w")} w:val="autofit"/>')
+    tblPr.append(tblLayout)
 
     tblBorders_xml = f'''<w:tblBorders {nsdecls("w")}>
         <w:top w:val="single" w:sz="4" w:space="0" w:color="auto"/>
@@ -231,17 +240,76 @@ def _set_cell_vertical_center(cell) -> None:
     tcPr.append(vAlign)
 
 
+# 表格前后间距常量（半行高度），单位：缇（twips），1 pt = 20 twips
+_HALF_LINE_TWIPS = 120  # 6 pt，约半行高度
+
+
+def _adjust_paragraph_spacing(p_elem, space_before_twips=None, space_after_twips=None) -> None:
+    """在段落现有间距基础上累加指定值。
+
+    若段落尚无 spacing 元素则新建；否则在现有值上累加。
+    用于在表格前后增加半行间距，不丢失已有间距信息。
+
+    Args:
+        p_elem: ``w:p`` XML 元素
+        space_before_twips: 要累加的段前间距（缇）
+        space_after_twips: 要累加的段后间距（缇）
+    """
+    pPr = p_elem.find(qn("w:pPr"))
+    if pPr is None:
+        pPr = OxmlElement("w:pPr")
+        p_elem.insert(0, pPr)
+
+    spacing = pPr.find(qn("w:spacing"))
+    if spacing is None:
+        spacing = OxmlElement("w:spacing")
+        pPr.append(spacing)
+
+    if space_before_twips is not None:
+        existing = spacing.get(qn("w:before"))
+        new_val = (int(existing) + space_before_twips) if existing else space_before_twips
+        spacing.set(qn("w:before"), str(new_val))
+
+    if space_after_twips is not None:
+        existing = spacing.get(qn("w:after"))
+        new_val = (int(existing) + space_after_twips) if existing else space_after_twips
+        spacing.set(qn("w:after"), str(new_val))
+
+
+def _add_spacing_around_table(tbl) -> None:
+    """在表格前后各增加半行间距，避免表格与正文紧贴。
+
+    利用 XML 兄弟节点关系找到表格前后的段落（``w:p``），
+    为前一段增加段后间距，为后一段增加段前间距。
+
+    Args:
+        tbl: ``python-docx`` Table 对象
+    """
+    tbl_elem = tbl._element
+
+    # 前一个兄弟段落 → 增加段后间距
+    prev = tbl_elem.getprevious()
+    if prev is not None and prev.tag == qn("w:p"):
+        _adjust_paragraph_spacing(prev, space_after_twips=_HALF_LINE_TWIPS)
+
+    # 后一个兄弟段落 → 增加段前间距
+    next_elem = tbl_elem.getnext()
+    if next_elem is not None and next_elem.tag == qn("w:p"):
+        _adjust_paragraph_spacing(next_elem, space_before_twips=_HALF_LINE_TWIPS)
+
+
 def _format_table_content(doc) -> None:
     """对文档中所有表格应用统一格式。
 
     包含：
-    - 表格级（宽度、边框）
+    - 表格级（宽度、边框、前后间距）
     - 单元格级（垂直居中）
     - 段落级（`Table Text` 样式 + run 字体设置）
     """
     table_text_style = doc.styles["Table Text"]
     for tbl in doc.tables:
         _apply_table_layout(tbl)
+        _add_spacing_around_table(tbl)
         for row in tbl.rows:
             for cell in row.cells:
                 _set_cell_vertical_center(cell)

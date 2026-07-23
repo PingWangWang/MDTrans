@@ -260,6 +260,8 @@ def apply_para_formatting(paragraph, style_def: StyleDefinition, is_table: bool 
             run.font.bold = False
         if style_def.italic:
             run.font.italic = True
+        elif run.font.italic is not True:
+            run.font.italic = False
 
         has_emoji = _contains_emoji(run.text)
         if style_def.is_code:
@@ -311,6 +313,7 @@ def create_or_update_style(doc: Document, style_def: StyleDefinition) -> None:
     style.font.name = style_def.font_name_latin
     style.font.size = Pt(style_def.font_size_pt)
     style.font.bold = style_def.bold
+    style.font.italic = style_def.italic
     style.font.color.rgb = _rgb_from_hex(style_def.color_hex)
 
     rPr = style.element.get_or_add_rPr()
