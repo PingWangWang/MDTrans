@@ -126,6 +126,10 @@ def main() -> None:
     args.append("--collect-all=pyee")
     # ── 收集 tkinterdnd2 拖拽支持 ──────────────────────────────────────
     args.append("--collect-all=tkinterdnd2")
+    # ── 收集 pypandoc 全部模块+数据（pandoc.exe 内置二进制） ────────────
+    # pyinstaller-hooks-contrib 已无 pandoc hook，必须显式收集；
+    # 否则 exe 内缺少 pandoc.exe，分发后在未安装 pandoc 的机器上转换失败
+    args.append("--collect-all=pypandoc")
 
     # ── 排除无关重型包 ──────────────────────────────────────────────────
     # 这些包不在项目依赖中，但 PyInstaller 会因 hook 扫描而误扫，拖慢打包

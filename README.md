@@ -124,24 +124,24 @@ MDTrans/
 
 ## 📥 导入支持格式
 
-| 类别 | 格式 |
-|------|------|
-| 文档 | PDF、DOCX、DOC（旧版）、RTF、EPUB |
-| 办公 | PPTX、XLSX、XLS（旧版） |
-| 网页 | HTML、HTM、RSS、XML |
-| 数据 | CSV、JSON |
-| 图片 | JPEG、PNG、GIF、BMP |
-| 音频 | WAV、MP3（需安装 `audio` 扩展） |
-| 邮件 | MSG（Outlook） |
+| 类别 | 格式                                 |
+| ---- | ------------------------------------ |
+| 文档 | PDF、DOCX、DOC（旧版）、RTF、EPUB    |
+| 办公 | PPTX、XLSX、XLS（旧版）              |
+| 网页 | HTML、HTM、RSS、XML                  |
+| 数据 | CSV、JSON                            |
+| 图片 | JPEG、PNG、GIF、BMP                  |
+| 音频 | WAV、MP3（需安装`audio` 扩展）     |
+| 邮件 | MSG（Outlook）                       |
 | 代码 | ZIP 压缩包、Jupyter Notebook (ipynb) |
 
 ## 📤 导出支持格式
 
-| 格式 | 说明 | 特色 |
-|------|------|------|
+| 格式           | 说明      | 特色                           |
+| -------------- | --------- | ------------------------------ |
 | **DOCX** | Word 文档 | 中文排版样式、Mermaid 图表渲染 |
-| **PDF** | PDF 文档 | 基于 xhtml2pdf 渲染 |
-| **HTML** | HTML 网页 | 干净可发布的 HTML 输出 |
+| **PDF**  | PDF 文档  | 基于 xhtml2pdf 渲染            |
+| **HTML** | HTML 网页 | 干净可发布的 HTML 输出         |
 
 ## 🛠️ 开发
 
