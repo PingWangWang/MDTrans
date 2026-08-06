@@ -190,6 +190,38 @@ uv run python build/build_exe.py
 - **团队协作**：统一使用 Markdown 协作，最终导出为带有公司模板的 Word 文档
 - **内容中台**：将 Markdown 作为源格式，一次编写多渠道发布（Word + PDF + HTML）
 
+## 📜 版本更新日志
+
+### v1.2.12（2026-08-06）
+- 🐛 修复：打包内置 pandoc.exe，修复分发到未安装 pandoc 的机器后导出转换报 `No pandoc was found`
+
+### v1.2.11（2026-07-23）
+- 🐛 修复：多文件同时拖入时路径解析失败导致转换报错，扩展为四种递进解析方式
+
+### v1.2.9（2026-07-23）
+- ✨ 新增：DOCX 表格 autofit 列宽自动调整，表格前后增加半行间距
+- 🔧 优化：拖拽支持（tkinterdnd2）升为核心依赖，开箱即用；打包脚本新增虚拟环境检测
+
+### v1.2.3（2026-07-20）
+- ✨ 新增：Markdown 转图片导出（基于 Playwright + 系统浏览器，无需下载 Chromium）
+- ✨ 新增：浏览器检测扩展至 8 种 Edge/Chrome 变种
+
+### v1.2.0（2026-07-20）
+- ✨ 新增：统一样式抽象层（StyleDefinition），14 种段落样式覆盖 DOCX/CSS/PDF
+- 🔧 优化：PDF 引擎统一为 pypandoc；版本号改为单源真理并新增自动同步脚本
+
+### v1.1.1（2026-07-20）
+- 🔧 新增 PyInstaller 打包脚本，支持一键打包单文件 exe
+
+### v1.1.0（2026-07-20）
+- ✨ 新增：DOCX 导入支持 base64 图片嵌入（引用式链接）
+- ✨ 新增：PDF 导出支持 Mermaid 图表渲染及网络连通性检测
+- 🗑️ 移除：导出自定义模板功能
+
+### v1.0.0（2026-07-16）
+- 首个正式版本：支持 20+ 格式导入为 Markdown（基于 MarkItDown）
+- 支持 Markdown 导出为 DOCX / PDF / HTML，内置中文排版样式与 Mermaid 渲染
+
 ## 🤝 贡献
 
 欢迎提交 Issue 和 Pull Request！
