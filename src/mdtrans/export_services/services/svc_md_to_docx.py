@@ -65,10 +65,14 @@ logger = get_logger(__name__)
 # 常量区：图像尺寸换算与页面默认值
 # 1pt = 12700 EMU（Office Open XML 单位）
 EMU_PER_POINT = 12700.0
-DEFAULT_PAGE_WIDTH_PT = 595
-DEFAULT_PAGE_HEIGHT_PT = 842
-IMAGE_SIDE_MARGIN_PT = 36
-IMAGE_TOP_BOTTOM_MARGIN_PT = 72
+DEFAULT_PAGE_WIDTH_PT = 595.3
+DEFAULT_PAGE_HEIGHT_PT = 841.9
+DEFAULT_LEFT_MARGIN_PT = 90.0
+DEFAULT_RIGHT_MARGIN_PT = 90.0
+DEFAULT_TOP_MARGIN_PT = 72.0
+DEFAULT_BOTTOM_MARGIN_PT = 72.0
+# [修改] 原因：图片占满正文区高度后没有空间容纳相邻文字，需预留约四分之一页面
+IMAGE_MAX_HEIGHT_RATIO = 0.75
 
 
 # ---------------------------------------------------------------------------
@@ -79,12 +83,50 @@ IMAGE_TOP_BOTTOM_MARGIN_PT = 72
 
 
 def _get_image_limits(doc) -> tuple[float, float]:
-    """根据文档页尺寸计算图片可用宽高上限（pt）。"""
+    """根据文档实际页边距计算图片可用宽高上限（pt）。
+
+    Args:
+        doc: 待处理的 DOCX 文档对象。
+
+    Returns:
+        图片可用的最大宽度和最大高度，单位均为 pt。
+    """
     section = doc.sections[0] if doc.sections else None
-    page_width = section.page_width.pt if section and section.page_width else DEFAULT_PAGE_WIDTH_PT
-    page_height = section.page_height.pt if section and section.page_height else DEFAULT_PAGE_HEIGHT_PT
-    max_width = page_width - 2 * IMAGE_SIDE_MARGIN_PT
-    max_height = page_height - 2 * IMAGE_TOP_BOTTOM_MARGIN_PT
+    page_width = (
+        section.page_width.pt
+        if section and section.page_width
+        else DEFAULT_PAGE_WIDTH_PT
+    )
+    page_height = (
+        section.page_height.pt
+        if section and section.page_height
+        else DEFAULT_PAGE_HEIGHT_PT
+    )
+    left_margin = (
+        section.left_margin.pt
+        if section and section.left_margin
+        else DEFAULT_LEFT_MARGIN_PT
+    )
+    right_margin = (
+        section.right_margin.pt
+        if section and section.right_margin
+        else DEFAULT_RIGHT_MARGIN_PT
+    )
+    top_margin = (
+        section.top_margin.pt
+        if section and section.top_margin
+        else DEFAULT_TOP_MARGIN_PT
+    )
+    bottom_margin = (
+        section.bottom_margin.pt
+        if section and section.bottom_margin
+        else DEFAULT_BOTTOM_MARGIN_PT
+    )
+
+    content_width = max(1.0, page_width - left_margin - right_margin)
+    content_height = max(1.0, page_height - top_margin - bottom_margin)
+    max_width = content_width
+    max_height = content_height * IMAGE_MAX_HEIGHT_RATIO
     return max_width, max_height
 
 
@@ -146,6 +188,13 @@ def _scale_extent_if_needed(extent_elem, context_tag: str, max_width_pt: float, 
     new_height_emu = int(current_height_emu * scale_factor)
     _set_extent_size_emu(extent_elem, new_width_emu, new_height_emu)
 
+    # [修改] 原因：显示尺寸与图形内部尺寸需保持一致，避免不同渲染器采用不同大小
+    drawing_container = extent_elem.getparent()
+    if drawing_container is not None:
+        for graphic_extent in drawing_container.xpath(".//pic:spPr/a:xfrm/a:ext"):
+            graphic_extent.set("cx", str(new_width_emu))
+            graphic_extent.set("cy", str(new_height_emu))
+
     logger.info(
         "✓ Scaled image from %.0fx%.0fpt to %.0fx%.0fpt",
         current_width_pt,
@@ -179,6 +228,62 @@ def _scale_images_in_paragraph(paragraph, max_width_pt: float, max_height_pt: fl
     except Exception as exc:
         logger.error(f"Error iterating paragraph elements: {exc}")
         logger.error(f"Traceback: {traceback.format_exc()}")
+
+
+def _has_following_body_text(paragraph) -> bool:
+    """判断图片段落后面是否还有非空正文段落。
+
+    Args:
+        paragraph: 图片所在的段落对象。
+
+    Returns:
+        后续存在非空段落时返回 ``True``，否则返回 ``False``。
+    """
+    next_elem = paragraph._p.getnext()
+    while next_elem is not None:
+        if next_elem.tag == qn("w:tbl"):
+            return False
+        if next_elem.tag == qn("w:p") and "".join(next_elem.itertext()).strip():
+            return True
+        next_elem = next_elem.getnext()
+    return False
+
+
+def _set_numbered_list_suffix_to_space(doc) -> int:
+    """将自动编号列表的编号后缀从 Tab 改为空格。
+
+    Args:
+        doc: 待处理的 DOCX 文档对象。
+
+    Returns:
+        已处理的数字编号级别数量。
+    """
+    try:
+        numbering = doc.part.numbering_part.element
+    except (AttributeError, NotImplementedError):
+        return 0
+
+    processed_count = 0
+    for level in numbering.iter(qn("w:lvl")):
+        num_format = level.find(qn("w:numFmt"))
+        if num_format is None:
+            continue
+        format_value = num_format.get(qn("w:val"))
+        if format_value in {None, "bullet", "none"}:
+            continue
+
+        suffix = level.find(qn("w:suff"))
+        if suffix is None:
+            suffix = OxmlElement("w:suff")
+            level_text = level.find(qn("w:lvlText"))
+            if level_text is not None:
+                level_text.addprevious(suffix)
+            else:
+                level.append(suffix)
+        suffix.set(qn("w:val"), "space")
+        processed_count += 1
+
+    return processed_count
 
 
 def _apply_table_layout(tbl) -> None:
@@ -412,6 +517,8 @@ def _step3_apply_to_content(doc) -> None:
     code_block_count = 0
     toc_count = {1: 0, 2: 0, 3: 0}
     max_image_width, max_image_height = _get_image_limits(doc)
+    # [修改] 原因：两位数编号跨过默认 Tab 位时会产生额外水平空白
+    numbered_level_count = _set_numbered_list_suffix_to_space(doc)
 
     for para in doc.paragraphs:
         try:
@@ -424,6 +531,9 @@ def _step3_apply_to_content(doc) -> None:
                 para.style = image_para_style
                 apply_para_formatting(para, IMAGE_CONFIG)
                 _scale_images_in_paragraph(para, max_image_width, max_image_height)
+                # [修改] 原因：避免缩小后的图片仍被分页到下一页而单独占页
+                if _has_following_body_text(para):
+                    para.paragraph_format.keep_with_next = True
             elif _has_num_pr(para):
                 para.style = custom_list_style
                 apply_para_formatting(para, CUSTOM_LIST_CONFIG)
@@ -445,6 +555,7 @@ def _step3_apply_to_content(doc) -> None:
 
     logger.info(f"Total code blocks formatted: {code_block_count}")
     logger.info(f"Total TOC items formatted: Level 1: {toc_count[1]}, Level 2: {toc_count[2]}, Level 3: {toc_count[3]}")
+    logger.debug(f"Numbered list levels using space suffix: {numbered_level_count}")
     _format_table_content(doc)
 
 

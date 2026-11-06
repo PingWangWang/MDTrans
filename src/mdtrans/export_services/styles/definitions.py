@@ -202,7 +202,8 @@ IMAGE_PARAGRAPH = StyleDefinition(
     font_name_latin="Times New Roman",
     font_size_pt=12.0,
     color_hex="#000000",
-    line_spacing=1.3,
+    # [修改] 原因：内联图片使用正文倍数行距会额外扩大行框，单倍行距便于分页控制
+    line_spacing=1.0,
     alignment="center",
     is_image=True,
 )
