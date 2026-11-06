@@ -214,10 +214,11 @@ CODE_BLOCK = StyleDefinition(
     font_name_latin="Times New Roman",
     font_size_pt=10.5,  # 五号字
     italic=True,
-    color_hex="#FFFFFF",
+    # [修改] 原因：白色代码文字配合深色底纹打印后不可读，统一改为白底黑字
+    color_hex="#000000",
     left_indent_pt=24.0,  # 左缩进 2 字符
     line_spacing=1.0,
-    background_color_hex="#000000",  # 黑色背景
+    background_color_hex=None,
     is_code=True,
 )
 

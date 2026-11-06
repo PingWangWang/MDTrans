@@ -8,6 +8,6 @@ MDTrans — 双向文档转换工具
 
         python scripts/sync_version.py
 """
-# [修改] 原因：发布 DOCX 编号列表空格后缀修复，补丁版本递增
-__version__ = "1.2.14"
-__version_info__ = (1, 2, 14)
+# [修改] 原因：发布代码块白底黑字打印修复，补丁版本递增
+__version__ = "1.2.15"
+__version_info__ = (1, 2, 15)
