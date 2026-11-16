@@ -62,13 +62,20 @@ class ExportPage:
         self.has_dnd = has_dnd
 
         self.input_files: list[str] = []
-        self.output_dir = tk.StringVar(value="")  # 每次启动清空，拖入文件后自动更新
-        self.output_format = tk.StringVar(value="DOCX")
+        # [修改] 原因：恢复上次输出目录、输出格式和导出选项
+        self.output_dir = tk.StringVar(value=config.get("last_output_dir", ""))
+        saved_format = str(config.get("last_format", "DOCX")).upper()
+        if saved_format not in OUTPUT_FORMATS:
+            saved_format = "DOCX"
+        self.output_format = tk.StringVar(value=saved_format)
         self.is_processing: bool = False
         self.last_output_file: str | None = None
         self.last_single_output: str | None = None
         self.save_mermaid_images = tk.BooleanVar(value=config.get("save_mermaid_images", False))
-        self.convert_mermaid_images = tk.BooleanVar(value=config.get("convert_mermaid_images", True))
+        convert_mermaid_default = config.get(
+            "convert_mermaid_images", config.get("convert_mermaid", True)
+        )
+        self.convert_mermaid_images = tk.BooleanVar(value=convert_mermaid_default)
 
         # 图片导出选项
         img_cfg = config.get("image", {})
@@ -200,6 +207,8 @@ class ExportPage:
                 ("summary", "#CC6600"), ("service", "#666666"),
                 ("normal", self._tm.colors["log_fg"]),
             ])
+        # [修改] 原因：按恢复的输出格式初始化选项显隐状态
+        self.on_format_change()
 
 
 
@@ -259,7 +268,13 @@ class ExportPage:
             for code, (desc, ext) in OUTPUT_FORMATS.items()
         ]
         self.format_combo = ttk.Combobox(cf, values=format_list, state="readonly", width=30)
-        self.format_combo.set("Word 文档 (.docx)")
+        selected_code = self.output_format.get()
+        selected_desc, selected_ext = OUTPUT_FORMATS[selected_code]
+        selected_label = (
+            selected_desc if selected_code == "IMAGE"
+            else f"{selected_desc} ({selected_ext})"
+        )
+        self.format_combo.set(selected_label)
         self.format_combo.grid(row=0, column=0, sticky=tk.W, padx=(0, 12))
         self.format_combo.bind("<<ComboboxSelected>>", self.on_format_change)
 
@@ -412,7 +427,7 @@ class ExportPage:
         self.convert_mermaid_label.grid() if show_mermaid else self.convert_mermaid_label.grid_remove()
         self.convert_mermaid_frame.grid() if show_mermaid else self.convert_mermaid_frame.grid_remove()
 
-        # 保存图片行：仅 DOCX 可见（PDF 无需持久化）
+        # [修改] 原因：保存图片偏好跨格式保留，仅控制当前选项行显隐
         self.save_mermaid_label.grid() if is_docx else self.save_mermaid_label.grid_remove()
         self.save_mermaid_frame.grid() if is_docx else self.save_mermaid_frame.grid_remove()
 
@@ -426,11 +441,6 @@ class ExportPage:
         # 图片选项容器：仅 IMAGE 可见
         if hasattr(self, "_image_frame"):
             self._image_frame.grid() if is_image else self._image_frame.grid_remove()
-
-        # DOCX 相关的选项重置
-        if not is_docx:
-            self.save_mermaid_images.set(False)
-        # convert_mermaid_images 保持用户选择，不重置
 
     # ── 图片设置回调 ──────────────────────────────────────────────────────
 

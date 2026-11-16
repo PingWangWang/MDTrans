@@ -98,6 +98,8 @@ def main() -> None:
 
     # ── 窗口关闭时保存配置 ────────────────────────────────────────────────
     def _on_close() -> None:
+        # [修改] 原因：关闭窗口前同步尚未落盘的界面状态
+        navigator.save_state()
         save_config(config)
         root.destroy()
 

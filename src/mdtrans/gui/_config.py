@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+from copy import deepcopy
 from pathlib import Path
 
 
@@ -31,6 +32,7 @@ CONFIG_FILE = _get_config_dir() / "config.json"
 # 默认配置
 DEFAULT_CONFIG: dict = {
     "theme": "light",
+    "active_tab": "import",
     "import": {
         "last_output_dir": "",
         "image_mode": "file",
@@ -38,7 +40,7 @@ DEFAULT_CONFIG: dict = {
     "export": {
         "last_output_dir": "",
         "last_format": "docx",
-        "convert_mermaid": True,
+        "convert_mermaid_images": True,
         "save_mermaid_images": False,
         "image": {
             "format": "png",
@@ -56,12 +58,17 @@ DEFAULT_CONFIG: dict = {
 
 def load_config() -> dict:
     """从 JSON 文件加载配置，缺失字段以默认值填充。"""
-    config = dict(DEFAULT_CONFIG)
+    # [修改] 原因：避免深层默认字典被已保存配置原地修改
+    config = deepcopy(DEFAULT_CONFIG)
     try:
         if CONFIG_FILE.exists():
             with open(CONFIG_FILE, encoding="utf-8") as f:
                 saved = json.load(f)
             _deep_merge(config, saved)
+            # [修改] 原因：移除已下线的自动页脚配置，页眉页脚改由用户在Word中手动设置
+            export_config = config.get("export")
+            if isinstance(export_config, dict):
+                export_config.pop("docx", None)
     except Exception:
         pass
     return config

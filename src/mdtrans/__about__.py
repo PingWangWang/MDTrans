@@ -8,6 +8,6 @@ MDTrans — 双向文档转换工具
 
         python scripts/sync_version.py
 """
-# [修改] 原因：发布Mermaid重试、降级反馈和DOCX样式清理优化，补丁版本递增
-__version__ = "1.2.20"
-__version_info__ = (1, 2, 20)
+# [修改] 原因：回退自动页脚功能并保留界面设置持久化，补丁版本递增
+__version__ = "1.2.25"
+__version_info__ = (1, 2, 25)

@@ -85,8 +85,12 @@ class ImportPage:
         self.has_dnd = has_dnd
 
         self.input_files: list[str] = []
-        self.output_dir = tk.StringVar(value="")  # 每次启动清空，拖入文件后自动更新
-        self.image_mode = tk.StringVar(value=config.get("image_mode", "file"))
+        # [修改] 原因：恢复上次输出目录和图片处理方式
+        self.output_dir = tk.StringVar(value=config.get("last_output_dir", ""))
+        image_mode = str(config.get("image_mode", "file"))
+        if image_mode not in {"file", "embed", "none"}:
+            image_mode = "file"
+        self.image_mode = tk.StringVar(value=image_mode)
         self.is_processing = False
         self.last_output_file: str | None = None
 

@@ -41,7 +41,11 @@ class Navigator:
         self.root = root
         self._tm = theme_manager
         self._config = config
-        self._current_tab: str = self.TAB_IMPORT
+        saved_tab = str(config.get("active_tab", self.TAB_IMPORT))
+        self._current_tab: str = (
+            saved_tab if saved_tab in {self.TAB_IMPORT, self.TAB_EXPORT}
+            else self.TAB_IMPORT
+        )
         self.has_dnd = has_dnd
 
         # 窗口标题
@@ -116,8 +120,13 @@ class Navigator:
             has_dnd=has_dnd,
         )
 
-        self._import_frame.pack(fill=tk.BOTH, expand=True)
-        # 默认显示导入 Tab
+        # [修改] 原因：恢复上次关闭时激活的Tab页面
+        initial_frame = (
+            self._import_frame
+            if self._current_tab == self.TAB_IMPORT
+            else self._export_frame
+        )
+        initial_frame.pack(fill=tk.BOTH, expand=True)
         self._update_tab_style()
 
     # ── Tab 切换 ──────────────────────────────────────────────────────────
@@ -128,6 +137,10 @@ class Navigator:
         Args:
             tab: ``"import"`` 或 ``"export"``。
         """
+        if tab not in {self.TAB_IMPORT, self.TAB_EXPORT}:
+            return
+        # [修改] 原因：记录当前Tab，供下次启动恢复
+        self._config["active_tab"] = tab
         if tab == self._current_tab:
             return
 
@@ -149,6 +162,13 @@ class Navigator:
             self._export_page.on_activate()
 
         self._update_tab_style()
+
+    def save_state(self) -> None:
+        """将两个页面的当前状态同步到配置对象，供窗口关闭前保存。"""
+        # [修改] 原因：直接关闭窗口时不会切换Tab，必须主动触发页面状态同步
+        self._config["active_tab"] = self._current_tab
+        self._import_page.on_deactivate()
+        self._export_page.on_deactivate()
 
     def _update_tab_style(self) -> None:
         """更新 Tab 按钮的样式：激活按钮使用主题 primary 色作为背景。"""
