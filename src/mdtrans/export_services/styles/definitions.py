@@ -45,6 +45,7 @@ class StyleDefinition:
         is_image: 是否为图片段落
         is_code: 是否为代码块
         is_toc: 是否为目录项
+        is_caption: 是否为图注或表注
     """
 
     name: str
@@ -68,6 +69,7 @@ class StyleDefinition:
     is_image: bool = False
     is_code: bool = False
     is_toc: bool = False
+    is_caption: bool = False
 
 
 # ---------------------------------------------------------------------------
@@ -208,6 +210,30 @@ IMAGE_PARAGRAPH = StyleDefinition(
     is_image=True,
 )
 
+IMAGE_CAPTION = StyleDefinition(
+    name="Image Caption",
+    style_keywords=("Image Caption",),
+    font_name="宋体",
+    font_name_latin="Times New Roman",
+    font_size_pt=12.0,
+    color_hex="#000000",
+    line_spacing=1.0,
+    alignment="center",
+    is_caption=True,
+)
+
+TABLE_CAPTION = StyleDefinition(
+    name="Table Caption",
+    style_keywords=("Table Caption",),
+    font_name="宋体",
+    font_name_latin="Times New Roman",
+    font_size_pt=12.0,
+    color_hex="#000000",
+    line_spacing=1.0,
+    alignment="center",
+    is_caption=True,
+)
+
 CODE_BLOCK = StyleDefinition(
     name="Code Block",
     font_name="宋体",
@@ -271,6 +297,8 @@ ALL_STYLES: list[StyleDefinition] = [
     CUSTOM_LIST,
     TABLE_TEXT,
     IMAGE_PARAGRAPH,
+    IMAGE_CAPTION,
+    TABLE_CAPTION,
     CODE_BLOCK,
     TOC_1,
     TOC_2,

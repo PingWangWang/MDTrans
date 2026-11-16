@@ -38,6 +38,8 @@ REQUIRED_PARAGRAPH_STYLES: set[str] = {
     "Table Text",
     "List Paragraph",
     "Image Paragraph",
+    "Image Caption",
+    "Table Caption",
     "Custom List",
     "Code Block",
     "Source Code",
@@ -247,6 +249,11 @@ def apply_para_formatting(paragraph, style_def: StyleDefinition, is_table: bool 
         _set_alignment(pf, style_def.alignment)
     if style_def.is_image:
         pf.alignment = 1  # Center
+
+    # [修改] 原因：Pandoc图注、表注需居中对齐，表注还需与表格保持同页
+    if style_def.is_caption:
+        _set_alignment(pf, style_def.alignment)
+        pf.keep_with_next = style_def.name == "Table Caption"
 
     # run 级格式化
     color_rgb = _rgb_from_hex(style_def.color_hex)
