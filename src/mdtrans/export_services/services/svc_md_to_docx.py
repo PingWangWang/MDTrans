@@ -330,6 +330,37 @@ def _apply_table_layout(tbl) -> None:
     tblPr.append(tblBorders)
 
 
+def _set_table_row_pagination(tbl) -> None:
+    """禁止表格行跨页拆分，并移除表头重复属性。
+
+    Args:
+        tbl: ``python-docx`` Table 对象
+    """
+    for row in tbl.rows:
+        trPr = row._tr.get_or_add_trPr()
+        cant_split = trPr.find(qn("w:cantSplit"))
+        if cant_split is None:
+            cant_split = OxmlElement("w:cantSplit")
+            # [修改] 原因：按 OOXML 顺序插入，避免 Word 忽略行分页属性
+            trPr.insert_element_before(
+                cant_split,
+                "w:trHeight",
+                "w:tblHeader",
+                "w:tblCellSpacing",
+                "w:jc",
+                "w:hidden",
+                "w:ins",
+                "w:del",
+                "w:trPrChange",
+            )
+        cant_split.set(qn("w:val"), "true")
+
+        tbl_header = trPr.find(qn("w:tblHeader"))
+        if tbl_header is not None:
+            # [修改] 原因：跨页时不重复表头
+            trPr.remove(tbl_header)
+
+
 def _set_cell_vertical_center(cell) -> None:
     """设置单元格垂直居中。"""
     tc = cell._element
@@ -414,6 +445,7 @@ def _format_table_content(doc) -> None:
     table_text_style = doc.styles["Table Text"]
     for tbl in doc.tables:
         _apply_table_layout(tbl)
+        _set_table_row_pagination(tbl)
         _add_spacing_around_table(tbl)
         for row in tbl.rows:
             for cell in row.cells:

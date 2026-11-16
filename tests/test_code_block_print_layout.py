@@ -39,6 +39,20 @@ def test_docx_code_block_uses_black_text_without_background(tmp_path):
     assert all(str(run.font.color.rgb) == "000000" for run in code_paragraph.runs)
 
 
+def test_docx_code_block_can_split_across_pages(tmp_path):
+    """DOCX 代码块不应被强制整体移到下一页。"""
+    md_text = '正文。\n\n```python\nprint("printable")\n```\n'
+    output_path = tmp_path / "code_block_pagination.docx"
+
+    convert_md_to_docx(md_text, output_path, convert_mermaid=False)
+
+    doc = Document(output_path)
+    code_paragraph = _get_code_block_paragraph(doc)
+
+    assert code_paragraph.paragraph_format.keep_together is False
+    assert code_paragraph.paragraph_format.keep_with_next is False
+
+
 def test_shared_css_code_block_uses_black_text_without_background():
     """共享 CSS 不应再给代码块设置深色背景。"""
     for css in (

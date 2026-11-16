@@ -223,10 +223,10 @@ def apply_para_formatting(paragraph, style_def: StyleDefinition, is_table: bool 
     pf.space_before = Pt(style_def.space_before_pt)
     pf.space_after = Pt(style_def.space_after_pt)
 
-    # 代码块：尽量保持段内连续
+    # [修改] 原因：代码块需允许跨页拆分，避免剩余空间不足时整块移到下一页
     if style_def.is_code:
-        pf.keep_together = True
-        pf.keep_with_next = True
+        pf.keep_together = False
+        pf.keep_with_next = False
 
     # 自定义列表：显式设置缩进
     if style_def.is_custom_list:
@@ -332,6 +332,11 @@ def create_or_update_style(doc: Document, style_def: StyleDefinition) -> None:
         pf.left_indent = Pt(style_def.left_indent_pt)
     pf.space_before = Pt(style_def.space_before_pt)
     pf.space_after = Pt(style_def.space_after_pt)
+
+    # [修改] 原因：取消标题继承的整组同页规则，避免标题随后续内容自动移到下一页
+    if style_def.name.startswith("Heading "):
+        pf.keep_with_next = False
+        pf.keep_together = False
 
     # 代码块背景色（段落底纹）
     if style_def.background_color_hex:
