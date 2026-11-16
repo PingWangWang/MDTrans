@@ -59,6 +59,9 @@ class _BatchState:
     overwrite_all: bool = False
     skip_all: bool = False
     last_output_file: str | None = None
+    # [修改] 原因：保存单文件转换统计，供批量汇总判断内容降级
+    last_conversion_status: dict[str, int] | None = None
+    degraded_files: int = 0
 
 
 # ── 文件锁定检测 ─────────────────────────────────────────────────────────────
@@ -191,12 +194,15 @@ class ConversionService:
             return False
         return True
 
-    def execute_conversion(self, md_text: str, output_file: Path, options: ConversionOptions) -> None:
-        """根据格式执行相应的转换。"""
+    def execute_conversion(
+        self, md_text: str, output_file: Path, options: ConversionOptions
+    ) -> dict[str, int] | None:
+        """根据格式执行相应的转换，并返回可用的内容转换统计。"""
         format_code = options.format_code
         try:
             if format_code == "DOCX":
-                self._convert_to_docx(md_text, output_file, options)
+                # [修改] 原因：DOCX 服务返回 Mermaid 统计，供状态反馈使用
+                return self._convert_to_docx(md_text, output_file, options)
             elif format_code == "PDF":
                 from mdtrans.export_services.services import svc_md_to_pdf
                 svc_md_to_pdf.convert_md_to_pdf(
@@ -214,11 +220,14 @@ class ConversionService:
             cause = getattr(e, '__cause__', None) or getattr(e, '__context__', None)
             detail = f" ({cause})" if cause else ""
             raise RuntimeError(f"缺少必要模块: {e}{detail}\n请运行 uv sync 安装依赖") from e
+        return None
 
-    def _convert_to_docx(self, md_text: str, output_file: Path, options: ConversionOptions) -> None:
+    def _convert_to_docx(
+        self, md_text: str, output_file: Path, options: ConversionOptions
+    ) -> dict[str, int]:
         """转换 Markdown 到 DOCX，支持 Mermaid 图片渲染。"""
         from mdtrans.export_services.services import svc_md_to_docx
-        svc_md_to_docx.convert_md_to_docx(
+        return svc_md_to_docx.convert_md_to_docx(
             md_text=md_text,
             output_path=output_file,
             convert_mermaid=options.convert_mermaid_images,
@@ -265,12 +274,15 @@ class ConversionService:
         """转换单个文件并写入输出目录。"""
         for retry_count in range(max_retries):
             try:
+                self._state.last_conversion_status = None
                 setup_pandoc_path(self._log)
                 md_text = read_markdown_file(file_path)
                 output_file = self.prepare_output_file(file_path, output_dir, options.format_code)
                 if not self.check_file_exists_and_overwrite(output_file, is_batch=is_batch):
                     return None
-                self.execute_conversion(md_text, output_file, options)
+                # [修改] 原因：记录当前文件是否发生 Mermaid 图表降级
+                conversion_status = self.execute_conversion(md_text, output_file, options)
+                self._state.last_conversion_status = conversion_status
                 # IMAGE 格式在 _convert_to_image 内部已设置 last_output_file 为实际图片路径
                 if options.format_code != "IMAGE":
                     self._state.last_output_file = str(output_file)
@@ -292,15 +304,35 @@ class ConversionService:
         self._log(f"开始处理 {total} 个文件...")
         self._log(f"目标格式: {format_desc}")
         converted: list[str] = []
+        # [修改] 原因：仅多文件处理时启用全部覆盖/全部跳过选项
+        is_batch = total > 1
         for i, file_path in enumerate(files, 1):
             self._log(f"[{i}/{total}] 正在转换: {Path(file_path).name}")
-            result = self.convert_single_file(file_path, output_dir, options, is_batch=True)
+            result = self.convert_single_file(
+                file_path, output_dir, options, is_batch=is_batch
+            )
             if result is not None:
                 stem = Path(file_path).stem
                 ext = OUTPUT_FORMATS[options.format_code][1]
-                self._log(f"✓ 转换成功: {stem}{ext}")
+                status = self._state.last_conversion_status
+                failed_count = status.get("failed", 0) if status else 0
+                # [修改] 原因：部分图表失败时不能继续显示为完整成功
+                if failed_count > 0:
+                    self._state.degraded_files += 1
+                    self._log(
+                        f"⚠ 警告：转换完成（部分降级）: {stem}{ext}，"
+                        f"{failed_count}/{status['total']} 个 Mermaid 图表保留为源码"
+                    )
+                else:
+                    self._log(f"✓ 转换成功: {stem}{ext}")
                 converted.append(result)
-        self._log(f"\n处理完成！共处理 {total} 个文件。")
+        if self._state.degraded_files > 0:
+            self._log(
+                f"\n⚠ 警告：处理完成！共处理 {total} 个文件，"
+                f"其中 {self._state.degraded_files} 个存在内容降级。"
+            )
+        else:
+            self._log(f"\n处理完成！共处理 {total} 个文件。")
         return converted
 
     @staticmethod

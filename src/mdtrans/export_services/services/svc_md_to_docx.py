@@ -471,7 +471,7 @@ def _step1_delete_styles(doc) -> None:
     关键点：
     - 段落样式：不在 `REQUIRED_PARAGRAPH_STYLES` 中的将被移除；
     - 字符样式：不在 `REQUIRED_CHARACTER_STYLES` 中的将被移除；
-    - 删除前先把引用它们的段落/run 重映射，避免悬空引用。
+    - 删除前先单次扫描正文和表格，统一重映射段落/run 引用，避免悬空引用。
     """
     normal_style = doc.styles["Normal"]
     existing_names = {s.name for s in doc.styles}
@@ -490,37 +490,41 @@ def _step1_delete_styles(doc) -> None:
         or (s.type == 2 and s.name not in REQUIRED_CHARACTER_STYLES)
     ]
 
+    # [修改] 原因：逐样式扫描全文会形成“样式数量 × 段落数量”的重复遍历
+    paragraph_fallbacks = {}
+    character_style_ids = set()
+    for style_obj in styles_to_delete:
+        if style_obj.type == 1:
+            # 嵌套列表子样式仍需保留列表格式，不能统一退回普通正文
+            is_list_sub = "List" in style_obj.name
+            paragraph_fallbacks[style_obj.name] = list_style if is_list_sub else normal_style
+        else:
+            style_id = style_obj._element.get(qn("w:styleId"))
+            if style_id:
+                character_style_ids.add(style_id)
+
+    all_paras = list(doc.paragraphs)
+    for tbl in doc.tables:
+        for row in tbl.rows:
+            for cell in row.cells:
+                all_paras.extend(cell.paragraphs)
+
+    # 迁移与删除分开执行，确保任何被删除样式都不再被正文引用
+    for para in all_paras:
+        fallback_style = paragraph_fallbacks.get(para.style.name)
+        if fallback_style is not None:
+            para.style = fallback_style
+
+        for run in para.runs:
+            rPr = run._element.find(qn("w:rPr"))
+            if rPr is None:
+                continue
+            rStyle = rPr.find(qn("w:rStyle"))
+            if rStyle is not None and rStyle.get(qn("w:val")) in character_style_ids:
+                rPr.remove(rStyle)
+
     for style_obj in styles_to_delete:
         try:
-            if style_obj.type == 1:
-                # Pandoc generates "List Paragraph 1/2/..." for nested lists;
-                # reassign those to List Paragraph so they keep bullet formatting.
-                is_list_sub = "List" in style_obj.name
-                fallback_style = list_style if is_list_sub else normal_style
-                for para in doc.paragraphs:
-                    if para.style.name == style_obj.name:
-                        para.style = fallback_style
-                for tbl in doc.tables:
-                    for row in tbl.rows:
-                        for cell in row.cells:
-                            for para in cell.paragraphs:
-                                if para.style.name == style_obj.name:
-                                    para.style = fallback_style
-            else:
-                style_id = style_obj._element.get(qn("w:styleId"))
-                all_paras = list(doc.paragraphs)
-                for tbl in doc.tables:
-                    for row in tbl.rows:
-                        for cell in row.cells:
-                            all_paras.extend(cell.paragraphs)
-                for para in all_paras:
-                    for run in para.runs:
-                        rPr = run._element.find(qn("w:rPr"))
-                        if rPr is not None:
-                            rStyle = rPr.find(qn("w:rStyle"))
-                            if rStyle is not None and rStyle.get(qn("w:val")) == style_id:
-                                rPr.remove(rStyle)
-
             style_obj._element.getparent().remove(style_obj._element)
             logger.info(f"Deleted style: {style_obj.name}")
         except Exception as exc:
@@ -657,7 +661,7 @@ def convert_md_to_docx(
     convert_mermaid: bool = True,
     save_mermaid_images: bool = False,
     output_dir: Path | None = None,
-) -> None:
+) -> dict[str, int]:
     """
     将 Markdown 文本转换为 DOCX。
 
@@ -670,11 +674,16 @@ def convert_md_to_docx(
         save_mermaid_images: 是否将 Mermaid 图片持久保存到输出目录
         output_dir: Mermaid 图片输出目录（当 `save_mermaid_images=True` 时建议提供）
 
+    Returns:
+        Mermaid 转换统计，包含 total、success 和 failed 数量
+
     Raises:
         ValueError: 输入处理失败
         Exception: 转换或后处理失败
     """
     processed_md = get_md_text(md_text, is_strip_wrapper=is_strip_wrapper)
+    # [修改] 原因：向调用层返回 Mermaid 降级统计，用于区分完整成功与部分成功
+    mermaid_stats = {"total": 0, "success": 0, "failed": 0}
 
     # 预扫描 Mermaid 代码块，用于分流到“图表转换流程”或“标准流程”
     mermaid_blocks = extract_mermaid_blocks(processed_md)
@@ -773,5 +782,6 @@ def convert_md_to_docx(
                 is_enable_toc=is_enable_toc,
             )
 
+    return mermaid_stats
 
 

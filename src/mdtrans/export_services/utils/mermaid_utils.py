@@ -26,6 +26,20 @@ MAX_RETRIES = 5  # 最大重试次数,增加到 5 次提高成功率
 RETRY_DELAY = 3  # 重试间隔(秒),增加到 3 秒避免频繁请求
 
 
+_ACC_TITLE_PATTERN = re.compile(
+    r"^\s*accTitle\s*:\s*(?P<title>.+?)\s*$",
+    re.IGNORECASE | re.MULTILINE,
+)
+_FIGURE_CAPTION_PATTERN = re.compile(
+    r"^\s*(?:图|Figure)\s*(?:\d+(?:-\d+)?|[A-Z]-\d+)\s*[：:]\s*\S+",
+    re.IGNORECASE,
+)
+_FOLLOWING_CAPTION_PATTERN = re.compile(
+    r"^[ \t]*(?:\r?\n[ \t]*){1,2}(?P<caption>[^\r\n]+)[ \t]*$",
+    re.MULTILINE,
+)
+
+
 def encode_mermaid_code(code: str) -> str:
     """
     将 Mermaid 代码编码为 mermaid.ink 所需的格式
@@ -44,6 +58,71 @@ def encode_mermaid_code(code: str) -> str:
     encoded = base64.urlsafe_b64encode(code_bytes).decode('utf-8')
 
     return encoded
+
+
+def _normalize_caption(text: str) -> str:
+    """规范化图注文本，用于判断 accTitle 与可见图名是否重复。
+
+    Args:
+        text: 待规范化的图注文本
+
+    Returns:
+        移除全部空白后的图注文本
+    """
+    return re.sub(r"\s+", "", text).strip()
+
+
+def _extract_mermaid_caption(
+    md_text: str, mermaid_code: str, block_end: int
+) -> tuple[str, int]:
+    """提取 Mermaid 图名并定位可删除的重复图注段落。
+
+    Args:
+        md_text: Mermaid 代码块所在的完整 Markdown 文本
+        mermaid_code: Mermaid 源代码
+        block_end: Mermaid 代码块结束位置
+
+    Returns:
+        图名和替换时应消费到的结束位置；无图名时返回空字符串
+    """
+    acc_title_match = _ACC_TITLE_PATTERN.search(mermaid_code)
+    acc_title = acc_title_match.group("title").strip() if acc_title_match else ""
+
+    tail_match = _FOLLOWING_CAPTION_PATTERN.match(md_text[block_end:])
+    following_caption = ""
+    following_end = block_end
+    if tail_match:
+        candidate = tail_match.group("caption").strip()
+        if _FIGURE_CAPTION_PATTERN.match(candidate):
+            following_caption = candidate
+            # [修改] 原因：只消费图名文本本身，保留其后的换行以维持Markdown段落间隔
+            following_end = block_end + tail_match.start("caption") + len(
+                tail_match.group("caption")
+            )
+
+    if acc_title:
+        if following_caption and _normalize_caption(acc_title) == _normalize_caption(
+            following_caption
+        ):
+            return acc_title, following_end
+        return acc_title, block_end
+
+    if following_caption:
+        return following_caption, following_end
+
+    return "", block_end
+
+
+def _escape_markdown_alt_text(text: str) -> str:
+    """转义图片替代文本中的Markdown特殊字符。
+
+    Args:
+        text: 原始图注文本
+
+    Returns:
+        可用于Markdown图片替代文本的安全文本
+    """
+    return text.replace("\\", "\\\\").replace("[", "\\[").replace("]", "\\]")
 
 
 def extract_mermaid_blocks(md_text: str) -> list[tuple[str, int, int]]:
@@ -106,7 +185,11 @@ def convert_mermaid_to_image(
 
     logger.info(f"正在转换 Mermaid 图表到: {output_path.name} (缩放: {scale}x)")
 
+    # [修改] 原因：HTTP 5xx 和 429 属于临时服务异常，应参与重试并记录真实尝试次数
+    attempts_made = 0
     for attempt in range(1, max_retries + 1):
+        attempts_made = attempt
+        retry_after = None
         try:
             logger.info(f"尝试 {attempt}/{max_retries}: 请求 mermaid.ink 服务...")
 
@@ -125,18 +208,31 @@ def convert_mermaid_to_image(
         except requests.exceptions.ConnectionError as e:
             logger.warning(f"⚠ 连接错误 (尝试 {attempt}/{max_retries}): {e}")
         except requests.exceptions.HTTPError as e:
-            logger.error(f"✗ HTTP 错误 (尝试 {attempt}/{max_retries}): {e}")
-            # HTTP 错误通常不需要重试
-            break
+            response = e.response
+            status_code = response.status_code if response is not None else None
+            # 429 与 5xx 表示服务暂时不可用，重试才有意义；其他 4xx 通常是请求本身错误
+            if status_code == 429 or (status_code is not None and 500 <= status_code < 600):
+                logger.warning(f"⚠ 服务端暂时不可用 (尝试 {attempt}/{max_retries}): {e}")
+                if response is not None:
+                    retry_after = response.headers.get("Retry-After")
+            else:
+                logger.error(f"✗ HTTP 错误 (尝试 {attempt}/{max_retries}): {e}")
+                break
         except Exception as e:
             logger.warning(f"⚠ 未知错误 (尝试 {attempt}/{max_retries}): {e}")
 
         # 如果不是最后一次尝试,等待后重试
         if attempt < max_retries:
-            logger.info(f"等待 {retry_delay} 秒后重试...")
-            time.sleep(retry_delay)
+            next_delay = retry_delay * (2 ** (attempt - 1))
+            if retry_after:
+                try:
+                    next_delay = max(0.0, float(retry_after))
+                except ValueError:
+                    logger.debug(f"忽略无法解析的 Retry-After 值: {retry_after}")
+            logger.info(f"等待 {next_delay:g} 秒后重试...")
+            time.sleep(next_delay)
 
-    logger.error(f"✗ Mermaid 图表转换失败(已重试 {max_retries} 次)")
+    logger.error(f"✗ Mermaid 图表转换失败(已尝试 {attempts_made} 次)")
     return None
 
 
@@ -229,12 +325,14 @@ def replace_mermaid_with_images(
             generated_images.append(result_path)
             success_count += 1
 
-            # 构建图片引用(Markdown 格式)- 使用空替代文本避免显示额外文字
-            img_ref = f"![]({img_filename})"
+            # [修改] 原因：图名写入图片替代文本后，Pandoc会生成居中的Image Caption
+            caption, replacement_end = _extract_mermaid_caption(md_text, code, end)
+            alt_text = _escape_markdown_alt_text(caption)
+            img_ref = f"![{alt_text}]({img_filename})"
 
             # 替换原文本中的代码块
             adjusted_start = start + offset
-            adjusted_end = end + offset
+            adjusted_end = replacement_end + offset
             modified_text = modified_text[:adjusted_start] + img_ref + modified_text[adjusted_end:]
 
             # 更新偏移量

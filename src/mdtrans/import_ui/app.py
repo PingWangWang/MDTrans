@@ -1,4 +1,4 @@
-﻿"""MDTrans - 导入模式页面（其他格式 → Markdown）。
+"""MDTrans - 导入模式页面（其他格式 → Markdown）。
 
 从 MarkitDownGUI/gui/_app.py 迁移，适配为 Navigator 的子页面。
 与 ExportPage 保持 UI 一致性：统一使用 ttk.Treeview、tkinter.scrolledtext.ScrolledText、
@@ -368,12 +368,22 @@ class ImportPage:
 
     # ── 覆盖确认 ────────────────────────────────────────────────────────────
 
-    def _ask_overwrite(self, filename: str) -> bool:
-        """批量覆盖确认（与 ExportPage 使用相同的 ask_overwrite_batch 对话框）。"""
-        from mdtrans.gui._dialogs import ask_overwrite_batch
+    def _ask_overwrite(self, filename: str, *, is_batch: bool) -> bool:
+        """按文件数量选择单文件或批量覆盖确认对话框。"""
+        from mdtrans.gui._dialogs import ask_overwrite, ask_overwrite_batch
+
+        theme = self._get_dialog_theme()
+        # [修改] 原因：单文件不显示全部覆盖和全部跳过选项
+        if not is_batch:
+            self._overwrite_all = False
+            self._skip_all = False
+            return ask_overwrite(theme, filename)
+
         should_continue, self._overwrite_all, self._skip_all = ask_overwrite_batch(
-            self._get_dialog_theme(), filename,
-            self._overwrite_all, self._skip_all,
+            theme,
+            filename,
+            self._overwrite_all,
+            self._skip_all,
         )
         return should_continue
 
@@ -476,7 +486,7 @@ class ImportPage:
                 elif self._skip_all:
                     self.log_message(f"  ✗ 已跳过: {output_file.name}")
                     return
-                elif not self._ask_overwrite(output_file.name):
+                elif not self._ask_overwrite(output_file.name, is_batch=total > 1):
                     self.log_message(f"  ✗ 已跳过: {output_file.name}")
                     return
 

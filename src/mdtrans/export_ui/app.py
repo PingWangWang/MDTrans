@@ -1,4 +1,4 @@
-﻿"""MDTrans - 导出模式页面（Markdown → 其他格式）。
+"""MDTrans - 导出模式页面（Markdown → 其他格式）。
 
 从 MarkdownExporterGUI/gui/_app.py 迁移，适配为 Navigator 的子页面。
 """
@@ -17,6 +17,7 @@ from mdtrans.export_ui.conversion import OUTPUT_FORMATS, ConversionOptions, Conv
 from mdtrans.gui._dialogs import (
     DialogTheme,
     ask_file_locked,
+    ask_overwrite as ask_overwrite_single,
     ask_overwrite_batch,
 )
 from mdtrans.gui._gui_helpers import (
@@ -132,6 +133,9 @@ class ExportPage:
         self, filename: str, *, is_batch: bool, overwrite_all: bool, skip_all: bool,
     ) -> tuple[bool, bool, bool]:
         theme = self._get_dialog_theme()
+        # [修改] 原因：单文件只显示覆盖和跳过，避免出现无意义的全部操作
+        if not is_batch:
+            return ask_overwrite_single(theme, filename), False, False
         return ask_overwrite_batch(theme, filename, overwrite_all, skip_all)
 
     def ask_file_locked(self, filename: str) -> bool:

@@ -346,7 +346,7 @@ def ask_overwrite_batch(
         top.destroy()
 
     def _do_skip() -> None:
-        result[0] = True
+        result[0] = False
         result[1] = False
         result[2] = False
         top.destroy()

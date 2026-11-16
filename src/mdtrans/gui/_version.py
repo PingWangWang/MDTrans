@@ -27,8 +27,8 @@ def _read_version() -> str:
         pass
 
     # 3. 回退
-    # [修改] 原因：保持异常回退值与单源版本号 1.2.17 一致
-    return "1.2.17"
+    # [修改] 原因：保持异常回退值与单源版本号 1.2.20 一致
+    return "1.2.20"
 
 
 APP_VERSION: str = _read_version()
